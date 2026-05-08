@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # ----------------------------------------------------------------------------
-# Daily flow on WORK PC. Bridges github.com <- one-way -> company git.
+# Daily flow on WORK PC. One-way bridge: github.com --> company git.
+# (github.com is read-only from this machine; only company git is writable.)
 #
-# Order (as you specified):
+# Order:
 #   1. Pull colleague changes from company git
-#   2. Pull your new changes from github.com
+#   2. Pull Teacher LLM changes from github.com (read-only)
 #   3. Merge if both changed (usually clean: different files)
-#   4. Push merged state back to company git
+#   4. Push merged state to company git
 #
 # Safe to run even when only one side has new commits.
 #
@@ -55,7 +56,7 @@ git fetch "$GITHUB_REMOTE"
 echo "==> [3/4] Merging $GITHUB_REMOTE/$DEFAULT_BRANCH (your changes)"
 git merge --no-edit "$GITHUB_REMOTE/$DEFAULT_BRANCH"
 
-# Decide whether we need to push
+# Step 4: push to company
 LOCAL=$(git rev-parse "$DEFAULT_BRANCH")
 REMOTE=$(git rev-parse "$COMPANY_REMOTE/$DEFAULT_BRANCH")
 if [[ "$LOCAL" == "$REMOTE" ]]; then
