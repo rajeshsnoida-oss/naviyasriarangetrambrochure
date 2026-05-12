@@ -1,0 +1,425 @@
+/* ═══════════════════════════════════════════════════════════════════
+   CSS custom properties
+   Breakpoints: mobile ≤480px | tablet 481–1024px | desktop >1024px
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* Palette */
+  --color-bg:          #fdf0ec;
+  --color-bg-alt:      #f5e4de;
+  --color-surface:     #fff5f0;
+  --color-dark:        #1a0709;
+  --color-text:        #2c1810;
+  --color-text-muted:  #6b4a3e;
+  --color-accent:      #8b1a1a;   /* deep maroon — high contrast on warm bg */
+  --color-gold:        #c9a84c;   /* decorative gold */
+  --color-border:      #e8d0c4;
+
+  /* Typography */
+  --font-heading: Georgia, 'Times New Roman', serif;
+  --font-body:    system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-tamil:   'Noto Sans Tamil', sans-serif;
+
+  /* Spacing */
+  --space-xs:   0.5rem;
+  --space-sm:   1rem;
+  --space-md:   1.5rem;
+  --space-lg:   2.5rem;
+  --space-xl:   4rem;
+  --max-width:  960px;
+  --section-px: 2rem;
+}
+
+/* ── Tamil font switching (D-005) ── */
+html[lang="ta"] .i18n-text {
+  font-family: var(--font-tamil), var(--font-body);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Reset
+   ═══════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+img { display: block; max-width: 100%; height: auto; }
+
+ul { list-style: none; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Base
+   ═══════════════════════════════════════════════════════════════════ */
+body {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  background-image: linear-gradient(160deg, #fdf0ec 0%, #f0d4c8 100%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  color: var(--color-dark);
+  line-height: 1.25;
+}
+
+/* Skip link — visible on focus for keyboard users (WCAG 2.4.1) */
+.skip-link {
+  position: absolute;
+  top: -3rem;
+  left: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 0.9rem;
+  border-radius: 0 0 4px 4px;
+  text-decoration: none;
+  z-index: 999;
+  transition: top 0.1s;
+}
+.skip-link:focus { top: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Page header
+   ═══════════════════════════════════════════════════════════════════ */
+.site-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.6rem var(--section-px);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Section base
+   ═══════════════════════════════════════════════════════════════════ */
+main > section,
+main > div {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space-xl) var(--section-px);
+}
+
+.section-heading {
+  font-size: 1.75rem;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-xs);
+  border-bottom: 2px solid var(--color-gold);
+  color: var(--color-dark);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Cover  (#cover)
+   ═══════════════════════════════════════════════════════════════════ */
+#cover {
+  max-width: 100%;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2d0709;
+  background-image: linear-gradient(160deg, #8b1a2a 0%, #2d0709 100%);
+  color: #fff;
+  text-align: center;
+  padding: var(--space-xl) var(--section-px);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Bottom border placeholder ──────────────────────────────────────
+   Drop your border image at: assets/images/border-bottom.png
+   Recommended: seamless horizontal tile, ~60–96px tall, on transparent
+   background. The same image is reused as divider on all sections.
+   ─────────────────────────────────────────────────────────────────── */
+#cover::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 96px;
+  background-image: url("assets/images/border-bottom.png");
+  background-repeat: repeat-x;
+  background-size: auto 96px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Top kolam border placeholder ───────────────────────────────────
+   Drop your kolam border image at: assets/images/border-kolam.png
+   Recommended: seamless horizontal tile, ~96px tall (1 inch @ 96dpi),
+   white pattern on transparent PNG background (alpha channel required).
+   ─────────────────────────────────────────────────────────────────── */
+#cover::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 96px;
+  background-image: url("assets/images/border-kolam.png");
+  background-repeat: repeat-x;
+  background-size: auto 96px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cover-inner {
+  position: relative;
+  z-index: 3;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Optional dancer photo on the cover — owner drops image into
+   assets/images/cover-dancer.jpg; slot is hidden when image is absent */
+.cover-photo {
+  width: 200px;
+  height: 260px;
+  margin-bottom: var(--space-sm);
+  border: 3px solid var(--color-gold);
+  border-radius: 2px;
+  object-fit: cover;
+  object-position: top;
+}
+.cover-photo[src="assets/images/cover-dancer.jpg"] { display: block; }
+
+/* Gold ornament dividers */
+.cover-ornament {
+  color: var(--color-gold);
+  letter-spacing: 0.3em;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.cover-event-type {
+  font-size: 0.8rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--color-gold);
+  margin-bottom: var(--space-xs);
+}
+
+.cover-performer {
+  font-size: clamp(1.8rem, 5.5vw, 3rem);
+  color: #fff;
+  line-height: 1.15;
+}
+
+.cover-disciple {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.7);
+}
+
+.cover-guru {
+  font-size: 1.3rem;
+  font-family: var(--font-heading);
+  color: var(--color-gold);
+}
+
+.cover-school {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.65);
+  letter-spacing: 0.05em;
+}
+
+.cover-event-details {
+  margin-top: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.85);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   School + Guru message  (#school-guru)
+   ═══════════════════════════════════════════════════════════════════ */
+#school-guru { display: flex; flex-direction: column; gap: var(--space-xl); }
+
+.school-mission h2 {
+  font-size: 1.5rem;
+  margin-bottom: var(--space-sm);
+}
+
+.guru-message {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.guru-photo img {
+  border-radius: 4px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.guru-message-body h2 { font-size: 1.4rem; margin-bottom: var(--space-sm); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Dance items  (#maargam, #dance-item-N)
+   ═══════════════════════════════════════════════════════════════════ */
+#maargam { padding-bottom: var(--space-lg); }
+
+.dance-item {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: var(--space-lg);
+  align-items: start;
+  padding: var(--space-lg) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dance-item:last-child { border-bottom: none; }
+
+.dance-item-text h3 {
+  font-size: 1.35rem;
+  margin-bottom: var(--space-sm);
+  color: var(--color-accent);
+}
+
+.dance-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 1rem;
+  margin-bottom: var(--space-sm);
+  font-size: 0.9rem;
+}
+
+.dance-meta dt { font-weight: 600; color: var(--color-text-muted); }
+
+.dance-item-photo img {
+  border-radius: 4px;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Bio sections  (#artist-bio, #guru-bio)
+   ═══════════════════════════════════════════════════════════════════ */
+#artist-bio,
+#guru-bio { background-color: var(--color-bg-alt); }
+
+.bio-content {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.bio-photo img {
+  border-radius: 4px;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+
+.bio-text h2 { font-size: 1.6rem; margin-bottom: var(--space-md); }
+.bio-text p  { margin-bottom: var(--space-sm); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Orchestra  (#orchestra)
+   ═══════════════════════════════════════════════════════════════════ */
+.orchestra-bios {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-lg);
+}
+
+.musician-bio figure img {
+  border-radius: 50%;
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  margin: 0 auto var(--space-sm);
+}
+
+.musician-details { text-align: center; }
+.musician-details h3 { font-size: 1.1rem; margin-bottom: 0.25rem; }
+.musician-instrument {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Gratitude  (#gratitude)
+   ═══════════════════════════════════════════════════════════════════ */
+#gratitude { background-color: var(--color-bg-alt); }
+
+.credits-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-xs) var(--space-lg);
+}
+
+.credits-list li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.credit-role {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.credit-role::after { content: ":"; }
+
+.credit-name { font-weight: 600; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Section bottom border placeholder (all sections except cover)
+   Same image as cover bottom: assets/images/border-bottom.png
+   ═══════════════════════════════════════════════════════════════════ */
+main > section:not(#cover)::after,
+main > div::after {
+  content: '';
+  display: block;
+  height: 60px;
+  margin: var(--space-xl) calc(-1 * var(--section-px)) 0;
+  background-image: url("assets/images/border-bottom.png");
+  background-repeat: repeat-x;
+  background-size: auto 60px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tablet  (481px – 1024px)
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  :root { --space-xl: 3rem; --section-px: 1.5rem; }
+
+  .guru-message       { grid-template-columns: 220px 1fr; }
+  .bio-content        { grid-template-columns: 240px 1fr; }
+  .dance-item         { grid-template-columns: 1fr 180px; }
+  .orchestra-bios     { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Mobile  (≤480px)
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  :root { --space-xl: 2rem; --section-px: 1rem; }
+
+  .guru-message       { grid-template-columns: 1fr; }
+  .bio-content        { grid-template-columns: 1fr; }
+
+  .dance-item         { grid-template-columns: 1fr; }
+  .dance-item-photo   { order: -1; }   /* photo above text on mobile */
+  .dance-item-photo img { aspect-ratio: 4 / 3; }
+
+  .orchestra-bios     { grid-template-columns: 1fr; }
+  .musician-details   { text-align: left; }
+  .musician-bio figure img { border-radius: 4px; margin: 0 0 var(--space-sm); }
+}

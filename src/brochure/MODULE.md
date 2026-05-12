@@ -1,6 +1,6 @@
 # brochure
 
-**Purpose**: Defines the HTML structure and section-slot contract for all 12 static content sections of the Arangetram brochure webpage. Controls section ordering, exposes stable section IDs consumed by the i18n and print modules, and provides the content skeleton the owner fills manually. (serves FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, NFR-1)
+**Purpose**: Defines the HTML structure and section-slot contract for all 12 static content sections of the Arangetram brochure webpage. Controls section ordering, exposes stable section IDs consumed by the i18n and print modules, and provides the content skeleton the owner fills manually. (serves FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, NFR-1, NFR-2)
 
 **Public surface**
 
@@ -23,7 +23,7 @@ Content slot convention — all translatable text elements carry a `data-i18n="<
 - Images carry `data-i18n-alt="<key>"` for translatable alt text.
 
 **Invariants**
-- Section order is fixed in the HTML: cover → school-guru → maargam → artist-bio → guru-bio → orchestra → gratitude → feedback-mount. Reordering is a hard-flag change.
+- Section order is managed by the visual editor (FR-17); reordering via the editor is expected and not a hard-flag change. Section IDs are stable regardless of order — i18n and print CSS selectors remain valid after any reorder.
 - Every section is a `<section>` element with the exact `id` listed above. Renaming any ID is a hard-flag change (i18n and print both depend on them).
 - All translatable text elements carry `data-i18n` attributes — brochure does not manipulate their content at runtime.
 - Images live under `assets/images/`; filename conventions are left to the owner.
@@ -50,6 +50,7 @@ Content slot convention — all translatable text elements carry a `data-i18n="<
 - *(none — brochure is the root HTML structure; no runtime imports)*
 
 **Depended on by**
+- [`src/editor/MODULE.md`](../editor/MODULE.md) — loads and modifies the brochure's HTML; section IDs and data-i18n conventions are authoritative from brochure
 - [`src/feedback/MODULE.md`](../feedback/MODULE.md) — mounts into `#feedback-mount`
 - [`src/i18n/MODULE.md`](../i18n/MODULE.md) — reads `data-i18n` attributes on brochure elements; mounts toggle into `#i18n-toggle-mount`
 - [`src/print/MODULE.md`](../print/MODULE.md) — targets brochure section IDs for page-break and visibility rules; mounts print button into `#print-trigger-mount`

@@ -1,5 +1,42 @@
 # Decisions
 
+## D-010: GrapesJS as editor framework
+**Status**: Active
+**Date**: 2026-05-12
+**Context**: FR-14–FR-19 require a local visual editor supporting WYSIWYG text editing, image swapping, section reordering, card addition, and design token controls. A framework was needed to avoid building drag-reorder and DOM serialisation from scratch.
+**Decision**: GrapesJS — open-source drag-and-drop page builder that serialises to clean HTML/CSS; natively supports component blocks (sections), drag reorder, style manager (CSS custom properties), and image swapping. MIT licence, no bundler required.
+**Why**: Covers all editor FRs natively with minimal custom code; clean HTML output preserves the static-site deployment model; active community; zero permanent install (served via `npx`).
+**Consequences**: Brochure HTML sections must be mapped to GrapesJS component types — a one-time config step per section type. GrapesJS serialisation must be tuned to preserve `data-i18n` attributes and existing class/ID conventions. Startup requires a lightweight local static server.
+**Alternatives considered**:
+- Custom `contenteditable` + DOM manipulation — rejected; fragile for rich editing (image swap, section reorder) without significant custom code.
+- Quill / Tiptap — rejected; document-centric editors with no section-layout or design-token controls.
+
+## D-009: Editor serialises to static HTML (Option A)
+**Status**: Active
+**Date**: 2026-05-12
+**Context**: ARCH-FLAG-1 required choosing how the visual editor persists changes. Option A: serialise editor DOM directly to `index.html` + `css/style.css`. Option B: content data layer (`data/content.js`) + runtime JS rendering in the deployed page.
+**Decision**: Option A — GrapesJS serialises editor state directly to `index.html` and `css/style.css`; no content data layer; deployed brochure remains pure static HTML.
+**Why**: Satisfies FR-20 without a build step. Keeps deployed brochure as pure static HTML (no runtime JS needed to populate content). Preserves brochure Non-goal "No dynamic content loading". Simpler for a solo developer managing a one-time event.
+**Consequences**: Editor is coupled to brochure HTML structure; structural changes made outside the editor may confuse GrapesJS component parsing. Tamil `data-i18n` attributes must be explicitly configured as pass-through in GrapesJS serialisation config.
+**Alternatives considered**:
+- Option B (content data layer + runtime JS) — rejected; changes brochure's static nature, requires runtime JS to populate content, adds a data model with no benefit for a one-time event.
+
+## D-008: WCAG 2.1 AA ownership (distributed)
+**Status**: Active
+**Date**: 2026-05-12
+**Context**: NFR-2 (WCAG 2.1 AA) had no owning module; multiple modules have WCAG-relevant surface (colour contrast, toggle behaviour, form accessibility). DRIFT-2 flagged this gap.
+**Decision**: Distributed ownership — brochure owns base colour contrast and structural semantics; i18n owns accessible toggle behaviour; feedback owns form accessibility (labels, focus indicators, ARIA).
+**Why**: Ownership follows where the relevant code lives; no single module owns all of WCAG, and a single-owner model would create a catch-all module with no real accountability.
+**Consequences**: Each module with interactive elements must cite NFR-2 in its Purpose line. Drift-check will flag any module that adds interactive elements without a documented WCAG note in its MODULE.md.
+
+## D-007: Responsive breakpoints
+**Status**: Active
+**Date**: 2026-05-12
+**Context**: NFR-1 required responsive layout at three breakpoints but no specific pixel values were anchored in any MODULE.md or DECISIONS entry. DRIFT-1 flagged this gap.
+**Decision**: mobile ≤480px, tablet 481–1024px, desktop >1024px — matching the values already implemented in `css/style.css` `@media` blocks.
+**Why**: Standard mobile-first breakpoints for a public event brochure; covers the expected viewport distribution for an Indian event audience with heavy mobile use.
+**Consequences**: All responsive CSS is written against these three ranges. Any new component must be tested at ≤480px, 481–1024px, and >1024px before being marked done. Changing a breakpoint value requires updating all `@media` blocks in `css/style.css` and the MODULE.md of any module that documents breakpoint-specific behaviour.
+
 ## D-006: @media print + window.print() for PDF export
 **Status**: Active
 **Date**: 2026-05-12
