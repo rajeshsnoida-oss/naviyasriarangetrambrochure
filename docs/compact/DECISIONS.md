@@ -1,5 +1,35 @@
 # Decisions
 
+## D-013: Cache-Control: no-store on all editor API endpoints
+
+**Status**: Active
+**Date**: 2026-05-12
+**Context**: server.py served all files without cache-control headers. After a user saved CSS token changes and reopened the editor, the browser served /api/style from cache — the Design Tokens panel showed stale values, making it appear the editor wasn't reflecting saved changes.
+**Decision**: send_file() gained a no_cache parameter; send_json() always sends no-store. All API-served content (editor.html, /api/brochure, /api/style, all JSON responses) gets `Cache-Control: no-store, no-cache, must-revalidate` + `Pragma: no-cache`. Static assets served from the filesystem without the no_cache flag are unaffected.
+**Why**: The editor is a local dev tool where stale data breaks the workflow entirely. No-store is the simplest and most reliable approach for a local server; cache-busting via query strings or ETags would require client-side coordination with no benefit here.
+**Consequences**: No browser caching of brochure files or editor CSS while the local server runs. Intentional for development. The deployed brochure on GitHub Pages uses its own cache headers independent of this server.
+
+## D-012: Duplicate style independence via unique CSS class injection
+
+**Status**: Active
+**Date**: 2026-05-12
+**Context**: GrapesJS stores style-manager edits against CSS class selectors. When a component is cloned (⎘ Duplicate), the clone shares the original's classes. Resizing an image in the clone also resized the original — reported by user immediately after Duplicate was added.
+**Decision**: The duplicate-component command walks all descendant components via onAll() and adds a unique class `gjsc-<uid>-<n>` to each structural element before inserting the clone. Original layout classes remain intact (CSS layout is unaffected); editor-applied style overrides write to the unique class, scoping them to that copy only.
+**Why**: Simpler than (a) converting class styles to inline styles post-clone (requires reading the CSS cascade at runtime) or (b) configuring GrapesJS to use component-ID selectors globally (changes behaviour for all components, not just clones, with unpredictable side effects).
+**Consequences**: Cloned elements carry extra classes in the serialised HTML saved to index.html. These classes are unstyled until the user edits that specific clone — harmless but slightly noisier HTML.
+
+## D-011: Client-side AI background removal via @imgly/background-removal
+
+**Status**: Active
+**Date**: 2026-05-12
+**Context**: FR-18 (image upload) was extended with a user request to extract the dancer from a photo (remove background). Three options were considered and presented to the user.
+**Decision**: @imgly/background-removal loaded from jsDelivr CDN — ONNX model runs entirely in the browser via WebAssembly. First use downloads ~50 MB of model files (cached by browser permanently). Result saved as a transparent PNG to assets/images/ via the existing /api/upload endpoint.
+**Why**: No API key, no per-image cost, works offline after first model download. Fits the stdlib-only local server philosophy. User selected this when offered the three options.
+**Consequences**: First use requires ~50 MB download from jsDelivr CDN; browser must be online that once. Subsequent uses are fully offline. Quality is good for portrait photos; complex or low-contrast backgrounds may leave fringing. Requires a modern browser with WebAssembly and dynamic import() support (all major browsers since ~2020).
+**Alternatives considered**:
+- Remove.bg API — rejected by user; requires paid API key, per-image cost, always-online.
+- Manual crop/clip tool — rejected by user; no background removal, just framing change.
+
 ## D-010: GrapesJS as editor framework
 **Status**: Active
 **Date**: 2026-05-12

@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brochure Editor — Arangetram</title>
+  <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.13/dist/css/grapes.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: #1d1d1d; color: #e0e0e0; font-family: system-ui, -apple-system, sans-serif; }
+    body { display: flex; flex-direction: column; }
+
+    /* ── Toolbar ─────────────────────────────────────────── */
+    #toolbar { background: #2d0709; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 14px; flex-shrink: 0; border-bottom: 1px solid #5a1018; }
+    .logo { font-size: 13px; font-weight: 700; color: #c9a84c; margin-right: auto; letter-spacing: 0.4px; white-space: nowrap; }
+    #status { font-size: 12px; color: #c9a84c; min-width: 200px; text-align: right; }
+    #status.error { color: #ff7070; }
+    .tb-divider { width: 1px; height: 22px; background: #5a1018; margin: 0 4px; }
+    .tb-btn { padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; border: 1px solid transparent; }
+    .tb-btn-save { background: #c9a84c; color: #1a0709; }
+    .tb-btn-save:hover { background: #e0c070; }
+    .tb-btn-outline { background: transparent; color: #c9a84c; border-color: #c9a84c; }
+    .tb-btn-outline:hover { background: rgba(201,168,76,0.12); }
+    .tb-btn-secondary { background: transparent; color: #aaa; border-color: #555; }
+    .tb-btn-secondary:hover { color: #fff; border-color: #888; }
+
+    /* ── Editor body ─────────────────────────────────────── */
+    .editor-body { flex: 1; display: flex; overflow: hidden; }
+    #gjs { flex: 1; overflow: hidden; }
+
+    /* ── Design tokens sidebar ───────────────────────────── */
+    #tokens-panel { width: 0; background: #242424; border-left: 0 solid #333; overflow: hidden; flex-shrink: 0; transition: width 0.2s ease, border-left-width 0.2s; display: flex; flex-direction: column; }
+    #tokens-panel.open { width: 300px; border-left-width: 1px; }
+    .tokens-inner { width: 300px; overflow-y: auto; flex: 1; padding-bottom: 24px; }
+    .tp-heading { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #777; padding: 12px 14px 8px; border-bottom: 1px solid #333; position: sticky; top: 0; background: #242424; z-index: 1; }
+    .tp-section { padding: 10px 14px; border-bottom: 1px solid #2a2a2a; }
+    .tp-section h3 { font-size: 10px; text-transform: uppercase; color: #666; letter-spacing: 0.5px; margin-bottom: 10px; }
+
+    /* Colour token row */
+    .token-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .token-row label { flex: 1; font-size: 12px; color: #bbb; cursor: pointer; }
+    .token-row input[type="color"] { width: 30px; height: 22px; padding: 1px 2px; border: 1px solid #555; border-radius: 3px; background: #333; cursor: pointer; flex-shrink: 0; }
+    .token-hex { font-size: 11px; color: #666; font-family: monospace; width: 58px; }
+
+    /* Font picker label */
+    .font-label { font-size: 12px; color: #bbb; margin-bottom: 5px; display: block; }
+
+    /* ── Custom Font Picker ───────────────────────────────── */
+    .fp-wrap { position: relative; margin-bottom: 16px; }
+
+    .fp-trigger {
+      width: 100%; display: flex; align-items: baseline; justify-content: space-between;
+      background: #2a2a2a; border: 1px solid #555; border-radius: 4px;
+      padding: 7px 10px; cursor: pointer; text-align: left; gap: 8px;
+    }
+    .fp-trigger:hover { border-color: #888; }
+    .fp-trigger-name { font-size: 11px; color: #777; min-width: 90px; flex-shrink: 0; white-space: nowrap; }
+    .fp-trigger-sample { font-size: 18px; color: #e0e0e0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+    .fp-trigger-arrow { color: #666; font-size: 10px; flex-shrink: 0; align-self: center; }
+
+    .fp-dropdown {
+      position: absolute; top: calc(100% + 3px); left: 0; right: 0; z-index: 500;
+      background: #1a1a1a; border: 1px solid #555; border-radius: 4px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.7);
+      display: flex; flex-direction: column; max-height: 400px;
+    }
+    .fp-dropdown.hidden { display: none; }
+
+    .fp-search {
+      padding: 8px 10px; background: #222; border: none; border-bottom: 1px solid #333;
+      color: #e0e0e0; font-size: 12px; outline: none; flex-shrink: 0; border-radius: 4px 4px 0 0;
+    }
+    .fp-search::placeholder { color: #555; }
+
+    .fp-list { overflow-y: auto; flex: 1; }
+
+    .fp-group-head {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #555;
+      padding: 7px 10px 2px; position: sticky; top: 0; background: #1a1a1a; z-index: 1;
+    }
+    .fp-option {
+      display: flex; align-items: baseline; justify-content: space-between;
+      padding: 5px 10px 4px; cursor: pointer; gap: 8px;
+    }
+    .fp-option:hover { background: #242424; }
+    .fp-option.fp-selected { background: rgba(201,168,76,0.13); }
+    .fp-option.fp-selected .fp-opt-name { color: #c9a84c; font-weight: 600; }
+    .fp-option.fp-selected .fp-opt-name::before { content: '✓ '; }
+    .fp-option.fp-hidden { display: none; }
+    .fp-opt-name { font-size: 11px; color: #666; min-width: 105px; flex-shrink: 0; }
+    .fp-opt-sample { font-size: 19px; color: #e0e0e0; overflow: hidden; white-space: nowrap; flex: 1; text-align: right; }
+
+    .tp-actions { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .tp-btn { padding: 7px; border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .tp-btn-apply { background: #444; color: #fff; }
+    .tp-btn-apply:hover { background: #555; }
+    .tp-note { font-size: 11px; color: #666; margin: 0; line-height: 1.5; }
+
+    /* ── Loading overlay ─────────────────────────────────── */
+    #loading { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; gap: 12px; color: #c9a84c; }
+    #loading h2 { font-size: 20px; font-weight: 600; }
+    #loading p { font-size: 13px; color: #888; margin: 0; }
+    #loading.hidden { display: none; }
+
+    .gjs-cv-canvas { background: #2a2a2a; }
+
+    /* ── Cutout modal ────────────────────────────────────── */
+    .cutout-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 9000; display: flex; align-items: center; justify-content: center; }
+    .cutout-modal.hidden { display: none; }
+    .cutout-modal-inner { background: #1e1e1e; border: 1px solid #444; border-radius: 8px; width: 640px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px); overflow-y: auto; display: flex; flex-direction: column; }
+    .cutout-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #333; font-weight: 600; font-size: 14px; flex-shrink: 0; }
+    .cutout-modal-close { background: none; border: none; color: #aaa; font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 3px; }
+    .cutout-modal-close:hover { color: #fff; background: #333; }
+    .cutout-drop-zone { margin: 24px; border: 2px dashed #444; border-radius: 8px; padding: 40px 24px; text-align: center; cursor: pointer; transition: border-color 0.15s; }
+    .cutout-drop-zone:hover, .cutout-drop-zone.dragover { border-color: #c9a84c; }
+    .cutout-drop-zone p { color: #888; font-size: 13px; margin: 6px 0; }
+    .cutout-drop-zone .cdz-title { font-size: 15px; color: #ccc; margin-bottom: 4px; }
+    .cutout-browse-btn { margin-top: 14px; padding: 7px 22px; background: #333; border: 1px solid #555; border-radius: 4px; color: #ccc; font-size: 13px; cursor: pointer; }
+    .cutout-browse-btn:hover { background: #444; color: #fff; }
+    .cutout-progress { padding: 48px 24px; text-align: center; }
+    .cutout-progress p { color: #c9a84c; font-size: 13px; margin: 8px 0; }
+    .cutout-spinner { width: 36px; height: 36px; border: 3px solid #333; border-top-color: #c9a84c; border-radius: 50%; animation: co-spin 0.8s linear infinite; margin: 0 auto 20px; }
+    @keyframes co-spin { to { transform: rotate(360deg); } }
+    .cutout-note { color: #555; font-size: 11px; }
+    .cutout-previews { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; }
+    .cutout-previews > div { display: flex; flex-direction: column; gap: 8px; }
+    .cutout-previews p { font-size: 10px; color: #777; text-align: center; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+    .cutout-orig-img { width: 100%; max-height: 260px; object-fit: contain; background: #111; border-radius: 4px; border: 1px solid #333; display: block; }
+    .cutout-result-img { width: 100%; max-height: 260px; object-fit: contain; background: repeating-conic-gradient(#2a2a2a 0% 25%, #1a1a1a 0% 50%) 0 0 / 16px 16px; border-radius: 4px; border: 1px solid #333; display: block; }
+    .cutout-actions { padding: 12px 20px 20px; display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; }
+    .cutout-save-btn { padding: 8px 20px; background: #c9a84c; color: #1a0709; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .cutout-save-btn:hover { background: #e0c070; }
+    .cutout-retry-btn { padding: 8px 20px; background: transparent; color: #aaa; border: 1px solid #555; border-radius: 4px; font-size: 13px; cursor: pointer; }
+    .cutout-retry-btn:hover { color: #fff; border-color: #888; }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <span class="logo">✦ Arangetram Brochure Editor</span>
+  <span id="status">Loading…</span>
+  <div class="tb-divider"></div>
+  <button class="tb-btn tb-btn-secondary" id="btn-tokens">Design Tokens</button>
+  <button class="tb-btn tb-btn-secondary" id="btn-duplicate" style="display:none" title="Duplicate selected element (dance item / musician bio)">⎘ Duplicate</button>
+  <button class="tb-btn tb-btn-secondary" id="btn-cutout" title="Remove background from a dancer photo (AI, runs in browser)">✂ Cutout</button>
+  <button class="tb-btn tb-btn-outline"   id="btn-preview">Preview</button>
+  <button class="tb-btn tb-btn-save"      id="btn-save">Save to index.html</button>
+</div>
+
+<div class="editor-body">
+  <div id="gjs"></div>
+
+  <aside id="tokens-panel" aria-label="Design tokens">
+    <div class="tokens-inner">
+      <div class="tp-heading">Design Tokens</div>
+      <div class="tp-section" id="token-colours"><h3>Colours</h3></div>
+      <div class="tp-section" id="token-fonts"><h3>Typography</h3></div>
+      <div class="tp-actions">
+        <button class="tp-btn tp-btn-apply" id="btn-preview-tokens">Preview tokens in canvas</button>
+        <p class="tp-note">Click "Save to index.html" to persist. Google Fonts are added to &lt;head&gt; automatically on save.</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<input type="file" id="cutout-file-input" accept="image/*" style="display:none">
+
+<div id="cutout-modal" class="cutout-modal hidden">
+  <div class="cutout-modal-inner">
+    <div class="cutout-modal-header">
+      <span>✂ Background Remover</span>
+      <button class="cutout-modal-close" id="cutout-close">✕</button>
+    </div>
+    <div id="cutout-drop-zone" class="cutout-drop-zone">
+      <p class="cdz-title">Drop a dancer photo here</p>
+      <p>AI removes the background, keeping only the dancer</p>
+      <button class="cutout-browse-btn" id="cutout-browse-btn">Choose photo…</button>
+      <p class="cutout-note" style="margin-top:14px;">First use downloads ~50 MB AI model — cached by browser forever after</p>
+    </div>
+    <div id="cutout-progress" class="cutout-progress hidden">
+      <div class="cutout-spinner"></div>
+      <p id="cutout-progress-msg">Initialising…</p>
+      <p class="cutout-note">First use downloads the AI model (~50 MB) — cached for future use</p>
+    </div>
+    <div id="cutout-preview-area" class="hidden">
+      <div class="cutout-previews">
+        <div><p>Original</p><img class="cutout-orig-img" id="cutout-orig-img" alt="original"></div>
+        <div><p>Cutout (transparent)</p><img class="cutout-result-img" id="cutout-result-img" alt="cutout result"></div>
+      </div>
+      <div class="cutout-actions">
+        <button class="cutout-retry-btn" id="cutout-retry-btn">Try another photo</button>
+        <button class="cutout-save-btn" id="cutout-save-btn">Save cutout to assets</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="loading">
+  <h2>Loading brochure…</h2>
+  <p id="loading-msg">Fetching index.html and style.css</p>
+</div>
+
+<script src="https://unpkg.com/grapesjs@0.21.13/dist/grapes.min.js"></script>
+
+<script>
+(async () => {
+  const loadingEl   = document.getElementById('loading');
+  const loadingMsg  = document.getElementById('loading-msg');
+  const statusEl    = document.getElementById('status');
+  const tokensPanel = document.getElementById('tokens-panel');
+  const colSection  = document.getElementById('token-colours');
+  const fontSection = document.getElementById('token-fonts');
+
+  let statusTimer;
+  function setStatus(msg, isError, autoResetMs) {
+    clearTimeout(statusTimer);
+    statusEl.textContent = msg;
+    statusEl.className   = isError ? 'error' : '';
+    if (autoResetMs) statusTimer = setTimeout(() => { statusEl.textContent = 'Ready'; statusEl.className = ''; }, autoResetMs);
+  }
+
+  function parseCSSVars(css) {
+    const vars = {};
+    const m = css.match(/:root\s*\{([^}]+)\}/);
+    if (m) for (const line of m[1].split(';')) {
+      const kv = line.match(/\s*(--[\w-]+)\s*:\s*(.+)/);
+      if (kv) vars[kv[1].trim()] = kv[2].trim();
+    }
+    return vars;
+  }
+  function toHex(v) {
+    if (!v) return '#888888';
+    v = v.trim();
+    if (/^#[0-9a-f]{6}$/i.test(v)) return v;
+    if (/^#[0-9a-f]{3}$/i.test(v)) return '#'+v[1]+v[1]+v[2]+v[2]+v[3]+v[3];
+    return '#888888';
+  }
+  function extractFamily(value) {
+    const m = value.match(/^'([^']+)'/) || value.match(/^"([^"]+)"/) || value.match(/^([\w ]+)/);
+    return m ? m[1].trim() : null;
+  }
+
+  /* ── Load brochure files ────────────────────────────────────────────── */
+  let indexHtml = '', styleCss = '', existingAssets = [];
+  try {
+    loadingMsg.textContent = 'Fetching brochure files…';
+    const [hRes, cRes, aRes] = await Promise.all([fetch('/api/brochure'), fetch('/api/style'), fetch('/api/assets')]);
+    indexHtml      = await hRes.text();
+    styleCss       = await cRes.text();
+    existingAssets = await aRes.json();
+  } catch (e) { loadingMsg.textContent = 'Error: ' + e.message; setStatus('Load failed', true); return; }
+
+  const bodyMatch   = indexHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  const bodyContent = bodyMatch ? bodyMatch[1].trim() : '';
+  const currentVars = parseCSSVars(styleCss);
+
+  /* ════════════════════════════════════════════════════════════════════
+     COLOUR tokens
+  ════════════════════════════════════════════════════════════════════ */
+  const COLOR_DEFS = [
+    { prop: '--color-bg',         label: 'Page background' },
+    { prop: '--color-bg-alt',     label: 'Background alt (gradient end)' },
+    { prop: '--color-surface',    label: 'Card / header surface' },
+    { prop: '--color-dark',       label: 'Cover background (dark)' },
+    { prop: '--color-accent',     label: 'Cover gradient start / accent' },
+    { prop: '--color-gold',       label: 'Gold ornaments' },
+    { prop: '--color-text',       label: 'Body text' },
+    { prop: '--color-text-muted', label: 'Muted / label text' },
+    { prop: '--color-border',     label: 'Borders & dividers' },
+  ];
+  const colorInputs = {};
+  for (const def of COLOR_DEFS) {
+    const hex = toHex(currentVars[def.prop]);
+    const row = document.createElement('div');
+    row.className = 'token-row';
+    const lbl  = Object.assign(document.createElement('label'), { textContent: def.label, htmlFor: 'c-'+def.prop });
+    const inp  = Object.assign(document.createElement('input'),  { type: 'color', value: hex, id: 'c-'+def.prop });
+    const span = Object.assign(document.createElement('span'),   { className: 'token-hex', textContent: hex });
+    inp.addEventListener('input', () => span.textContent = inp.value);
+    row.append(lbl, inp, span);
+    colSection.appendChild(row);
+    colorInputs[def.prop] = inp;
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     GOOGLE FONTS catalogue
+     Batched into 3 URLs loaded together when the font panel opens.
+  ════════════════════════════════════════════════════════════════════ */
+  const GFB = 'https://fonts.googleapis.com/css2?';
+  function batchUrl(specs) { return GFB + specs.map(s => 'family=' + s.replace(/ /g, '+')).join('&') + '&display=swap'; }
+
+  /* Per-family href for saving to index.html */
+  const GF_URLS = {};
+  [
+    /* Serif classical */
+    "Playfair Display:ital,wght@0,400;0,700;1,400",
+    "Cinzel:wght@400;600;700",
+    "Cormorant Garamond:ital,wght@0,400;0,600;1,400",
+    "IM Fell English:ital@0;1",
+    "EB Garamond:ital,wght@0,400;0,600;1,400",
+    "Libre Baskerville:ital,wght@0,400;0,700;1,400",
+    "Merriweather:ital,wght@0,300;0,400;0,700;1,300",
+    "Lora:ital,wght@0,400;0,600;1,400",
+    "Crimson Text:ital,wght@0,400;0,600;1,400",
+    "Spectral:ital,wght@0,300;0,400;0,600;1,300",
+    "Cardo:ital,wght@0,400;0,700;1,400",
+    "PT Serif:ital,wght@0,400;0,700;1,400",
+    "Source Serif 4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400",
+    "Tinos:ital,wght@0,400;0,700;1,400",
+    "Gentium Plus:ital,wght@0,400;0,700;1,400",
+    "Bodoni Moda:ital,opsz,wght@0,6..96,400;0,6..96,600;1,6..96,400",
+    "DM Serif Display:ital@0;1",
+    "Gilda Display:wght@400",
+    "Lustria:wght@400",
+    "Josefin Slab:ital,wght@0,300;0,400;0,600;1,300",
+    "Zilla Slab:ital,wght@0,300;0,400;0,600;1,300",
+    "Crete Round:ital@0;1",
+    "Unna:ital,wght@0,400;0,700;1,400",
+    "Sorts Mill Goudy:ital@0;1",
+    "GFS Didot:wght@400",
+    "Arbutus Slab:wght@400",
+    /* Script / calligraphy */
+    "Dancing Script:wght@400;600;700",
+    "Great Vibes:wght@400",
+    "Sacramento:wght@400",
+    "Pinyon Script:wght@400",
+    "Tangerine:wght@400;700",
+    "Alex Brush:wght@400",
+    "Allura:wght@400",
+    "Carattere:wght@400",
+    "Ephesis:wght@400",
+    "Italianno:wght@400",
+    "Lavishly Yours:wght@400",
+    "Mea Culpa:wght@400",
+    "Niconne:wght@400",
+    "Rouge Script:wght@400",
+    "Ms Madi:wght@400",
+    "The Nautigal:wght@400;700",
+    "Parisienne:wght@400",
+    "Euphoria Script:wght@400",
+    "Clicker Script:wght@400",
+    "Kaushan Script:wght@400",
+    "Style Script:wght@400",
+    "Petit Formal Script:wght@400",
+    "Marck Script:wght@400",
+    "Mr Dafoe:wght@400",
+    "Hurricane:wght@400",
+    "Yellowtail:wght@400",
+    "Ruthie:wght@400",
+    "Corinthia:wght@400",
+    "Pacifico:wght@400",
+    /* Sans-serif headings */
+    "Raleway:ital,wght@0,300;0,400;0,600;0,700;1,400",
+    "Josefin Sans:ital,wght@0,300;0,400;0,600;1,300",
+    "Montserrat:ital,wght@0,300;0,400;0,600;0,700;1,400",
+    "Philosopher:ital,wght@0,400;0,700;1,400;1,700",
+    "Poiret One:wght@400",
+    "Cormorant:ital,wght@0,300;0,400;0,600;1,300",
+    "Quattrocento:ital,wght@0,400;0,700;1,400",
+    "Cinzel Decorative:wght@400;700",
+    "Yeseva One:wght@400",
+    "Forum:wght@400",
+    /* Sans-serif body */
+    "Lato:ital,wght@0,300;0,400;0,700;1,300;1,400",
+    "Open Sans:ital,wght@0,300;0,400;0,600;0,700;1,400",
+    "Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400",
+    "Poppins:ital,wght@0,300;0,400;0,500;0,600;1,400",
+    "Nunito:ital,wght@0,300;0,400;0,600;0,700;1,400",
+    "Source Sans 3:ital,wght@0,300;0,400;0,600;1,400",
+    "Noto Sans:ital,wght@0,300;0,400;0,600;1,400",
+    "Rubik:ital,wght@0,300;0,400;0,500;0,700;1,400",
+    "Work Sans:ital,wght@0,300;0,400;0,500;0,600;1,400",
+    "Mulish:ital,wght@0,300;0,400;0,600;0,700;1,400",
+    "Karla:ital,wght@0,300;0,400;0,600;1,400",
+    "DM Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400",
+    "Jost:ital,wght@0,300;0,400;0,500;0,600;1,400",
+    "Quicksand:wght@300;400;500;600;700",
+    "Outfit:wght@300;400;500;600;700",
+    "Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;1,14..32,400",
+    "Figtree:ital,wght@0,300;0,400;0,500;0,600;1,400",
+    "Cabin:ital,wght@0,400;0,500;0,600;0,700;1,400",
+    "PT Sans:ital,wght@0,400;0,700;1,400",
+    "Plus Jakarta Sans:ital,wght@0,300;0,400;0,500;0,600;1,400",
+    "Varela Round:wght@400",
+  ].forEach(spec => {
+    const family = spec.split(':')[0];
+    GF_URLS[family] = GFB + 'family=' + spec.replace(/ /g, '+') + '&display=swap';
+  });
+
+  /* Batch load URLs (3 requests = all fonts) */
+  const BATCHES = [
+    batchUrl(["Playfair Display:ital,wght@0,400;0,700;1,400","Cinzel:wght@400;600;700","Cormorant Garamond:ital,wght@0,400;0,600;1,400","IM Fell English:ital@0;1","EB Garamond:ital,wght@0,400;0,600;1,400","Libre Baskerville:ital,wght@0,400;0,700;1,400","Merriweather:ital,wght@0,300;0,400;0,700;1,300","Lora:ital,wght@0,400;0,600;1,400","Crimson Text:ital,wght@0,400;0,600;1,400","Spectral:ital,wght@0,300;0,400;0,600;1,300","Cardo:ital,wght@0,400;0,700;1,400","PT Serif:ital,wght@0,400;0,700;1,400","Source Serif 4:ital,opsz,wght@0,8..60,400;1,8..60,400","Tinos:ital,wght@0,400;0,700;1,400","Gentium Plus:ital,wght@0,400;0,700;1,400","Bodoni Moda:ital,opsz,wght@0,6..96,400;1,6..96,400","DM Serif Display:ital@0;1","Gilda Display:wght@400","Lustria:wght@400","Josefin Slab:ital,wght@0,300;0,400;0,600;1,300","Zilla Slab:ital,wght@0,300;0,400;0,600;1,300","Crete Round:ital@0;1","Unna:ital,wght@0,400;0,700;1,400","Sorts Mill Goudy:ital@0;1","GFS Didot:wght@400","Arbutus Slab:wght@400"]),
+    batchUrl(["Dancing Script:wght@400;600;700","Great Vibes:wght@400","Sacramento:wght@400","Pinyon Script:wght@400","Tangerine:wght@400;700","Alex Brush:wght@400","Allura:wght@400","Carattere:wght@400","Ephesis:wght@400","Italianno:wght@400","Lavishly Yours:wght@400","Mea Culpa:wght@400","Niconne:wght@400","Rouge Script:wght@400","Ms Madi:wght@400","The Nautigal:wght@400;700","Parisienne:wght@400","Euphoria Script:wght@400","Clicker Script:wght@400","Kaushan Script:wght@400","Style Script:wght@400","Petit Formal Script:wght@400","Marck Script:wght@400","Mr Dafoe:wght@400","Hurricane:wght@400","Yellowtail:wght@400","Ruthie:wght@400","Corinthia:wght@400","Pacifico:wght@400","Raleway:ital,wght@0,300;0,400;0,600;0,700;1,400","Josefin Sans:ital,wght@0,300;0,400;0,600;1,300","Montserrat:ital,wght@0,300;0,400;0,600;0,700;1,400","Philosopher:ital,wght@0,400;0,700;1,400;1,700","Poiret One:wght@400","Cormorant:ital,wght@0,300;0,400;0,600;1,300","Quattrocento:ital,wght@0,400;0,700;1,400","Cinzel Decorative:wght@400;700","Yeseva One:wght@400","Forum:wght@400"]),
+    batchUrl(["Lato:ital,wght@0,300;0,400;0,700;1,400","Open Sans:ital,wght@0,300;0,400;0,600;0,700;1,400","Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400","Poppins:ital,wght@0,300;0,400;0,500;0,600;1,400","Nunito:ital,wght@0,300;0,400;0,600;0,700;1,400","Source Sans 3:ital,wght@0,300;0,400;0,600;1,400","Noto Sans:ital,wght@0,300;0,400;0,600;1,400","Rubik:ital,wght@0,300;0,400;0,500;0,700;1,400","Work Sans:ital,wght@0,300;0,400;0,500;0,600;1,400","Mulish:ital,wght@0,300;0,400;0,600;0,700;1,400","Karla:ital,wght@0,300;0,400;0,600;1,400","DM Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400","Jost:ital,wght@0,300;0,400;0,500;0,600;1,400","Quicksand:wght@300;400;500;600;700","Outfit:wght@300;400;500;600;700","Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;1,14..32,400","Figtree:ital,wght@0,300;0,400;0,500;0,600;1,400","Cabin:ital,wght@0,400;0,500;0,600;0,700;1,400","PT Sans:ital,wght@0,400;0,700;1,400","Plus Jakarta Sans:ital,wght@0,300;0,400;0,500;0,600;1,400","Varela Round:wght@400"]),
+  ];
+
+  let batchesLoaded = false;
+  const loadedInCanvas = new Set();
+
+  function loadBatchesIntoPage() {
+    if (batchesLoaded) return;
+    batchesLoaded = true;
+    for (const href of BATCHES) {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet'; l.href = href;
+      document.head.appendChild(l);
+    }
+  }
+  function loadFontIntoCanvas(family) {
+    if (!family || loadedInCanvas.has(family) || !GF_URLS[family]) return;
+    loadedInCanvas.add(family);
+    try {
+      const doc = editor?.Canvas?.getDocument?.();
+      if (!doc) return;
+      if (doc.querySelector(`link[data-gf="${CSS.escape(family)}"]`)) return;
+      const l = document.createElement('link');
+      l.rel = 'stylesheet'; l.href = GF_URLS[family]; l.dataset.gf = family;
+      doc.head.appendChild(l);
+    } catch (_) {}
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     FONT picker data
+  ════════════════════════════════════════════════════════════════════ */
+  const FONT_DEFS = [
+    {
+      prop: '--font-heading',
+      label: 'Heading font',
+      sample: 'Swapna Ramachandran',
+      groups: [
+        { head: 'System  (no download needed)', opts: [
+          { name: 'Georgia',         value: "Georgia, 'Times New Roman', serif" },
+          { name: 'Palatino',        value: 'Palatino Linotype, Palatino, serif' },
+          { name: 'Times New Roman', value: "'Times New Roman', Times, serif" },
+        ]},
+        { head: 'Serif — Classical & Elegant', opts: [
+          'Playfair Display','Cinzel','Cormorant Garamond','IM Fell English','EB Garamond',
+          'Libre Baskerville','Merriweather','Lora','Crimson Text','Spectral','Cardo',
+          'PT Serif','Source Serif 4','Tinos','Gentium Plus','Bodoni Moda','DM Serif Display',
+          'Gilda Display','Lustria','Josefin Slab','Zilla Slab','Crete Round','Unna',
+          'Sorts Mill Goudy','GFS Didot','Arbutus Slab',
+        ]},
+        { head: 'Script & Calligraphy  (great for names)', opts: [
+          'Great Vibes','Dancing Script','Sacramento','Pinyon Script','Tangerine',
+          'Alex Brush','Allura','The Nautigal','Parisienne','Euphoria Script',
+          'Petit Formal Script','Clicker Script','Kaushan Script','Style Script',
+          'Marck Script','Mr Dafoe','Corinthia','Italianno','Lavishly Yours',
+          'Mea Culpa','Niconne','Rouge Script','Carattere','Ephesis','Ms Madi',
+          'Hurricane','Yellowtail','Ruthie','Pacifico',
+        ]},
+        { head: 'Sans-serif Headings', opts: [
+          'Raleway','Josefin Sans','Montserrat','Philosopher','Poiret One',
+          'Cormorant','Quattrocento','Cinzel Decorative','Yeseva One','Forum',
+        ]},
+      ],
+    },
+    {
+      prop: '--font-body',
+      label: 'Body font',
+      sample: 'An evening of grace, rhythm & devotion.',
+      groups: [
+        { head: 'System  (no download needed)', opts: [
+          { name: 'System UI  (default)', value: "system-ui, -apple-system, 'Segoe UI', sans-serif" },
+          { name: 'Georgia',             value: "Georgia, 'Times New Roman', serif" },
+          { name: 'Arial',               value: 'Arial, Helvetica, sans-serif' },
+          { name: 'Verdana',             value: 'Verdana, Geneva, sans-serif' },
+        ]},
+        { head: 'Sans-serif — Clean & Readable', opts: [
+          'Lato','Open Sans','Roboto','Poppins','Nunito','Source Sans 3','Noto Sans',
+          'Rubik','Work Sans','Mulish','Karla','DM Sans','Jost','Quicksand','Outfit',
+          'Inter','Figtree','Cabin','PT Sans','Plus Jakarta Sans','Varela Round',
+          'Raleway','Montserrat',
+        ]},
+        { head: 'Serif — Warm & Readable', opts: [
+          'Merriweather','Lora','Libre Baskerville','Crimson Text','EB Garamond',
+          'PT Serif','Source Serif 4','Gentium Plus','Tinos','Cardo','Spectral',
+          'Playfair Display','Cormorant Garamond',
+        ]},
+      ],
+    },
+  ];
+
+  /* ── Build a font value from an option entry ─────────────────────── */
+  function optValue(opt, groupHead) {
+    if (typeof opt === 'object') return opt.value;
+    const isScript  = groupHead.toLowerCase().includes('script') || groupHead.toLowerCase().includes('calligraphy');
+    const isSerif   = groupHead.toLowerCase().includes('serif') || groupHead.toLowerCase().includes('elegant') || groupHead.toLowerCase().includes('classical');
+    const fallback  = isScript ? 'cursive' : isSerif ? "Georgia, serif" : "system-ui, sans-serif";
+    return `'${opt}', ${fallback}`;
+  }
+  function optName(opt) { return typeof opt === 'object' ? opt.name : opt; }
+
+  /* ── Build the custom picker for a font def ──────────────────────── */
+  const fontPickers = {};  // prop → { getCurrentValue, el }
+
+  for (const def of FONT_DEFS) {
+    const currentVal = currentVars[def.prop] || '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'fp-wrap';
+
+    const lbl = document.createElement('label');
+    lbl.className = 'font-label';
+    lbl.textContent = def.label;
+
+    /* Trigger button */
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'fp-trigger';
+    trigger.innerHTML = `<span class="fp-trigger-name"></span><span class="fp-trigger-sample">${def.sample}</span><span class="fp-trigger-arrow">▾</span>`;
+
+    /* Dropdown */
+    const dropdown = document.createElement('div');
+    dropdown.className = 'fp-dropdown hidden';
+
+    const searchInp = document.createElement('input');
+    searchInp.type = 'text'; searchInp.className = 'fp-search'; searchInp.placeholder = 'Search fonts…';
+
+    const list = document.createElement('div');
+    list.className = 'fp-list';
+
+    dropdown.append(searchInp, list);
+    wrap.append(lbl, trigger, dropdown);
+    fontSection.appendChild(wrap);
+
+    /* Track selected option */
+    let selectedOpt = null;
+    let selectedValue = currentVal;
+    let selectedName  = extractFamily(currentVal) || 'Select font…';
+
+    function updateTrigger() {
+      trigger.querySelector('.fp-trigger-name').textContent   = selectedName;
+      trigger.querySelector('.fp-trigger-sample').style.fontFamily = selectedValue || 'inherit';
+    }
+
+    /* Build option elements */
+    const allOptions = [];
+
+    for (const group of def.groups) {
+      const head = document.createElement('div');
+      head.className = 'fp-group-head';
+      head.textContent = group.head;
+      head.dataset.groupHead = '1';
+      list.appendChild(head);
+
+      for (const rawOpt of group.opts) {
+        const name  = optName(rawOpt);
+        const value = optValue(rawOpt, group.head);
+        const family = GF_URLS[name] ? name : null;
+
+        const row = document.createElement('div');
+        row.className = 'fp-option';
+        row.dataset.name  = name.toLowerCase();
+        row.dataset.value = value;
+        row.dataset.family = family || '';
+
+        row.innerHTML = `<span class="fp-opt-name">${name}</span><span class="fp-opt-sample" style="font-family:${value}">${def.sample}</span>`;
+
+        /* Mark currently selected */
+        if (currentVal && currentVal.includes(name.replace(/'/g, ''))) {
+          row.classList.add('fp-selected');
+          selectedOpt  = row;
+          selectedName = name;
+          selectedValue = value;
+        }
+
+        row.addEventListener('click', () => {
+          if (selectedOpt) selectedOpt.classList.remove('fp-selected');
+          row.classList.add('fp-selected');
+          selectedOpt   = row;
+          selectedName  = name;
+          selectedValue = value;
+          updateTrigger();
+          if (family) loadFontIntoCanvas(family);
+          closeDropdown();
+        });
+
+        list.appendChild(row);
+        allOptions.push({ el: row, head });
+      }
+    }
+
+    updateTrigger();
+
+    /* Open / close */
+    function openDropdown() {
+      dropdown.classList.remove('hidden');
+      loadBatchesIntoPage();
+      searchInp.value = '';
+      allOptions.forEach(({ el, head }) => { el.classList.remove('fp-hidden'); head.style.display = ''; });
+      searchInp.focus();
+      if (selectedOpt) selectedOpt.scrollIntoView({ block: 'nearest' });
+    }
+    function closeDropdown() { dropdown.classList.add('hidden'); }
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.contains('hidden') ? openDropdown() : closeDropdown();
+    });
+    document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) closeDropdown(); });
+
+    /* Search / filter */
+    searchInp.addEventListener('input', () => {
+      const q = searchInp.value.toLowerCase().trim();
+      const groupHasVisible = new Map();
+      allOptions.forEach(({ el, head }) => {
+        const visible = !q || el.dataset.name.includes(q);
+        el.classList.toggle('fp-hidden', !visible);
+        if (visible) groupHasVisible.set(head, true);
+      });
+      allOptions.forEach(({ head }) => {
+        head.style.display = groupHasVisible.has(head) ? '' : 'none';
+      });
+    });
+    searchInp.addEventListener('keydown', e => { if (e.key === 'Escape') closeDropdown(); });
+
+    fontPickers[def.prop] = {
+      getCurrentValue: () => selectedValue,
+      getCurrentName:  () => selectedName,
+      originalVal: currentVal,
+    };
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     GrapesJS
+  ════════════════════════════════════════════════════════════════════ */
+  const editor = grapesjs.init({
+    container: '#gjs', height: '100%', width: 'auto',
+    fromElement: false, components: bodyContent, style: '',
+    canvas: { styles: ['/css/style.css'] },
+    storageManager: false,
+    assetManager: { assets: existingAssets, upload: '/api/upload', uploadName: 'files', uploadText: 'Drop image here or click to upload', multiUpload: false },
+    deviceManager: { devices: [
+      { name: 'Desktop', width: '' },
+      { name: 'Tablet',  width: '820px', widthMedia: '1024px' },
+      { name: 'Mobile',  width: '375px', widthMedia: '480px'  },
+    ]},
+    styleManager: { sectors: [
+      { name: 'Typography', open: false, buildProps: ['font-size','font-weight','line-height','letter-spacing','color','text-align'] },
+      { name: 'Spacing',    open: false, buildProps: ['padding','margin'] },
+    ]},
+    blockManager: { blocks: [] },
+  });
+
+  editor.DomComponents.addType('brochure-section', {
+    isComponent: el => el.nodeType === 1 && el.tagName === 'SECTION',
+    model: { defaults: { name: 'Section', draggable: 'main', droppable: false, copyable: false, removable: false } },
+  });
+  editor.DomComponents.addType('dance-item', {
+    isComponent: el => el.nodeType === 1 && el.tagName === 'ARTICLE' && el.classList.contains('dance-item'),
+    model: { defaults: { name: 'Dance item', draggable: '#maargam', copyable: true, removable: true } },
+  });
+  editor.DomComponents.addType('musician-bio', {
+    isComponent: el => el.nodeType === 1 && el.tagName === 'ARTICLE' && el.classList.contains('musician-bio'),
+    model: { defaults: { name: 'Musician bio', draggable: '.orchestra-bios', copyable: true, removable: true } },
+  });
+
+  editor.on('load', () => {
+    loadingEl.classList.add('hidden');
+    setStatus('Ready');
+    /* Load fonts for currently selected values */
+    for (const def of FONT_DEFS) {
+      const fam = extractFamily(fontPickers[def.prop].getCurrentValue());
+      if (fam) loadFontIntoCanvas(fam);
+    }
+  });
+
+  /* ── Duplicate (copy) selected component ─────────────────────────── */
+  const btnDuplicate = document.getElementById('btn-duplicate');
+
+  editor.Commands.add('duplicate-component', {
+    run(ed) {
+      const sel = ed.getSelected();
+      if (!sel || !sel.get('copyable')) return;
+      const parent = sel.parent();
+      if (!parent) return;
+      const idx = parent.components().indexOf(sel);
+      const clone = sel.clone();
+
+      // Each structural element in the clone gets a unique CSS class so the
+      // Style Manager stores overrides against that class only — not the shared
+      // layout class that both the original and copy have. Without this, resizing
+      // an image in the copy would also resize the original.
+      const uid = Date.now().toString(36);
+      let n = 0;
+      clone.onAll(comp => {
+        const tag = (comp.get('tagName') || '').toLowerCase();
+        if (tag && tag !== 'text') comp.addClass('gjsc-' + uid + '-' + (n++));
+      });
+
+      parent.components().add(clone, { at: idx + 1 });
+      ed.select(clone);
+      setStatus('Duplicated ✓', false, 2000);
+    },
+  });
+
+  editor.on('component:selected', component => {
+    btnDuplicate.style.display = component && component.get('copyable') ? '' : 'none';
+  });
+  editor.on('component:deselected', () => { btnDuplicate.style.display = 'none'; });
+  btnDuplicate.addEventListener('click', () => editor.Commands.run('duplicate-component'));
+
+  /* ════════════════════════════════════════════════════════════════════
+     Save
+  ════════════════════════════════════════════════════════════════════ */
+  async function doSave() {
+    setStatus('Saving…');
+    try {
+      const html    = editor.getHtml();
+      const cssVars = {};
+
+      for (const [prop, inp] of Object.entries(colorInputs)) {
+        if (inp.value.toLowerCase() !== toHex(currentVars[prop]).toLowerCase()) cssVars[prop] = inp.value;
+      }
+      for (const def of FONT_DEFS) {
+        const newVal = fontPickers[def.prop].getCurrentValue();
+        if (newVal && newVal !== fontPickers[def.prop].originalVal) cssVars[def.prop] = newVal;
+      }
+
+      const googleFontLinks = FONT_DEFS.map(def => {
+        const fam = extractFamily(fontPickers[def.prop].getCurrentValue());
+        return fam && GF_URLS[fam] ? { family: fam, href: GF_URLS[fam] } : null;
+      }).filter(Boolean);
+
+      const res  = await fetch('/api/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html, cssVars, googleFontLinks }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setStatus('Saved ✓', false, 3000);
+        for (const def of FONT_DEFS) fontPickers[def.prop].originalVal = fontPickers[def.prop].getCurrentValue();
+        return true;
+      } else {
+        setStatus('Save failed', true); alert('Save error: ' + json.error); return false;
+      }
+    } catch (e) { setStatus('Save error', true); alert('Error: ' + e.message); return false; }
+  }
+
+  document.getElementById('btn-save').addEventListener('click', doSave);
+
+  document.getElementById('btn-preview').addEventListener('click', async () => {
+    setStatus('Saving for preview…');
+    const ok = await doSave();
+    if (ok) window.open('/index.html', '_blank');
+  });
+
+  document.getElementById('btn-tokens').addEventListener('click', () => tokensPanel.classList.toggle('open'));
+
+  document.getElementById('btn-preview-tokens').addEventListener('click', () => {
+    try {
+      const doc = editor.Canvas.getDocument();
+      if (!doc) { alert('Canvas not ready.'); return; }
+      const root = doc.documentElement;
+      for (const [prop, inp] of Object.entries(colorInputs)) root.style.setProperty(prop, inp.value);
+      for (const def of FONT_DEFS) {
+        const val = fontPickers[def.prop].getCurrentValue();
+        if (val) { root.style.setProperty(def.prop, val); loadFontIntoCanvas(extractFamily(val)); }
+      }
+      setStatus('Tokens live in canvas (save to persist)', false, 4000);
+    } catch (e) { alert('Canvas preview error: ' + e.message); }
+  });
+
+  /* ── Cutout / background removal ─────────────────────────────────── */
+  (function () {
+    const modal       = document.getElementById('cutout-modal');
+    const dropZone    = document.getElementById('cutout-drop-zone');
+    const progressEl  = document.getElementById('cutout-progress');
+    const progressMsg = document.getElementById('cutout-progress-msg');
+    const previewArea = document.getElementById('cutout-preview-area');
+    const origImg     = document.getElementById('cutout-orig-img');
+    const resultImg   = document.getElementById('cutout-result-img');
+    const fileInput   = document.getElementById('cutout-file-input');
+
+    let resultBlob = null, origName = '';
+    let removeBgFn = null;
+
+    function showOnly(el) {
+      [dropZone, progressEl, previewArea].forEach(e => e.classList.add('hidden'));
+      el.classList.remove('hidden');
+    }
+
+    document.getElementById('btn-cutout').addEventListener('click', () => {
+      resultBlob = null; origName = '';
+      origImg.src = ''; resultImg.src = ''; fileInput.value = '';
+      showOnly(dropZone);
+      modal.classList.remove('hidden');
+    });
+    document.getElementById('cutout-close').addEventListener('click', () => modal.classList.add('hidden'));
+    document.getElementById('cutout-browse-btn').addEventListener('click', () => fileInput.click());
+    document.getElementById('cutout-retry-btn').addEventListener('click', () => {
+      fileInput.value = '';
+      showOnly(dropZone);
+    });
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) processFile(file);
+    });
+    dropZone.addEventListener('click', e => {
+      if (e.target === dropZone || e.target.tagName === 'P') fileInput.click();
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) processFile(fileInput.files[0]);
+    });
+
+    async function processFile(file) {
+      origName = file.name;
+      origImg.src = URL.createObjectURL(file);
+      showOnly(progressEl);
+
+      try {
+        if (!removeBgFn) {
+          progressMsg.textContent = 'Downloading AI model (~50 MB, first use only)…';
+          const mod = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal/dist/browser-bundle.js');
+          removeBgFn = mod.removeBackground;
+        }
+        progressMsg.textContent = 'Removing background…';
+        resultBlob = await removeBgFn(file, {
+          publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal/dist/',
+          progress: (key, current, total) => {
+            if (total > 0 && key.includes('fetch')) {
+              progressMsg.textContent = `Downloading model: ${Math.round(current / total * 100)}%`;
+            } else if (key === 'compute:inference') {
+              progressMsg.textContent = 'Running AI inference…';
+            }
+          },
+        });
+        resultImg.src = URL.createObjectURL(resultBlob);
+        showOnly(previewArea);
+      } catch (err) {
+        showOnly(dropZone);
+        alert('Cutout failed: ' + err.message);
+      }
+    }
+
+    document.getElementById('cutout-save-btn').addEventListener('click', async () => {
+      if (!resultBlob) return;
+      const stem    = origName.replace(/\.[^.]+$/, '');
+      const outName = stem + '-cutout.png';
+      const form    = new FormData();
+      form.append('files', new File([resultBlob], outName, { type: 'image/png' }));
+      try {
+        const res  = await fetch('/api/upload', { method: 'POST', body: form });
+        const json = await res.json();
+        if (json.data && json.data[0]) {
+          editor.AssetManager.add(json.data[0]);
+          setStatus('Cutout saved: ' + outName + ' — open Asset Manager to use it', false, 4000);
+          modal.classList.add('hidden');
+        }
+      } catch (e) { alert('Save failed: ' + e.message); }
+    });
+  })();
+
+})();
+</script>
+</body>
+</html>
