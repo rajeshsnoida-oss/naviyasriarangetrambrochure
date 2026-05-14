@@ -26,6 +26,7 @@ MIME_MAP = {
     '.html':  'text/html; charset=utf-8',
     '.css':   'text/css',
     '.js':    'application/javascript',
+    '.mjs':   'application/javascript',
     '.json':  'application/json',
     '.png':   'image/png',
     '.jpg':   'image/jpeg',
@@ -37,6 +38,7 @@ MIME_MAP = {
     '.woff':  'font/woff',
     '.woff2': 'font/woff2',
     '.ttf':   'font/ttf',
+    '.wasm':  'application/wasm',
 }
 
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp'}
@@ -118,7 +120,6 @@ def update_css_custom_props(style_css: str, new_vars: dict) -> str:
 class EditorHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
-        # Suppress default access log noise; only print saves
         pass
 
     def send_json(self, data, status=200):
@@ -281,7 +282,7 @@ def main():
     httpd = http.server.HTTPServer(addr, EditorHandler)
 
     print()
-    print('  ✦  Arangetram Brochure Editor')
+    print('  Arangetram Brochure Editor')
     print()
     print(f'  Open:    http://localhost:{PORT}')
     print(f'  Editing: {ROOT / "index.html"}')

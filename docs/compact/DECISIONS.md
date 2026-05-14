@@ -1,5 +1,23 @@
 # Decisions
 
+## D-015: npm registry tarball as model download source
+
+**Status**: Active
+**Date**: 2026-05-13
+**Context**: download-vendor.py needed to fetch ~211 MB of ONNX model chunks and WASM files. The library's default publicPath is staticimgly.com; jsDelivr also hosts the data package. Both returned HTTP 403 to Python urllib requests (block non-browser User-Agents). The same data is published as the separate npm package @imgly/background-removal-data@1.4.5.
+**Decision**: Download the tarball directly from the npm registry (registry.npmjs.org) using urllib + a browser User-Agent header, extract the package/dist/ tree in-memory with tarfile, and write the contents to src/editor/vendor/background-removal/models/.
+**Why**: npm registry served the tarball successfully where staticimgly.com and jsDelivr did not. The registry URL is stable, unauthenticated, and contains identical content to the CDN. In-memory extraction avoids writing a temporary .tgz file to disk.
+**Consequences**: One-time ~211 MB download required before using Cutout. If the library version is bumped, the VERSION constant in download-vendor.py must be updated and the script re-run. The models/ folder is large and must be excluded from git (or already is via .gitignore).
+
+## D-014: Import map + local index.mjs for background removal library
+
+**Status**: Active
+**Date**: 2026-05-13
+**Context**: processFile dynamically imported @imgly/background-removal via esm.sh (full-package URL). The cutout feature hung indefinitely — esm.sh bundles onnxruntime-web into a single opaque file, and the WASM loading behaviour inside that bundle was unpredictable (likely triggering WASM fetch before the library could set ort.env.wasm.wasmPaths to local blob URLs).
+**Decision**: Add a `<script type="importmap">` to editor.html that resolves the four bare specifiers used by index.mjs (lodash, ndarray, onnxruntime-web, zod) to individual esm.sh CDN URLs. Import the library itself from the locally-served vendor file (/src/editor/vendor/background-removal/dist/index.mjs).
+**Why**: Separate module imports give the browser a proper module graph where onnxruntime-web is its own module instance. The imgly library sets ort.env.wasm.wasmPaths before InferenceSession.create(), which works correctly when ORT is a separate module. The esm.sh full-bundle bypassed this by merging ORT into one file with unpredictable init ordering.
+**Consequences**: editor.html requires internet on first use to download four dependency modules from esm.sh (cached after that). The import map version pins must stay in sync with the versions used by background-removal@1.4.5. Updating the library version requires re-checking the import map entries.
+
 ## D-013: Cache-Control: no-store on all editor API endpoints
 
 **Status**: Active

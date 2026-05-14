@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-12
+**Last updated**: 2026-05-13
 **Last drift-check**: 2026-05-12 — mode: design — 0 resolved, 2 skipped
 
 ## Done
@@ -14,6 +14,8 @@
 - 2026-05-12 Editor module architected — src/editor/MODULE.md; brochure invariants updated; D-007–D-010 logged; MAP.md regenerated
 - 2026-05-12 Editor module implemented — src/editor/server.py + editor.html (GrapesJS 0.21 CDN); Python HTTP server; save-to-index.html + CSS vars; section reorder + text editing + image asset manager; start.bat launcher
 - 2026-05-12 Editor polish — cache-control fix (design tokens always fresh on reload); font picker ✓ selected-state indicator; Duplicate button with unique style classes per clone (independent resize); AI Cutout modal (@imgly/background-removal CDN, browser-side); D-011–D-013 logged
+- 2026-05-13 AI Cutout model download fixed — download-vendor.py rewrote to fetch from npm registry tarball; 211 MB model chunks extracted to vendor/background-removal/models/
+- 2026-05-13 Editor server fixes — .mjs/.wasm MIME types added; Unicode console crash removed; processFile switched to import map + local index.mjs for reliable onnxruntime-web WASM loading
 
 ## In progress
 
@@ -22,6 +24,7 @@
 ## Next
 
 - **Use the editor**: `python src/editor/server.py` (or double-click `start.bat`) → open http://localhost:3033
+- Confirm Cutout works end-to-end with a real photo (first run takes 1-2 min — WASM compile)
 - `/switch-phase development feedback` — implement feedback module (Google Apps Script integration; highest risk)
 - Provide border image assets: assets/images/border-kolam.png and assets/images/border-bottom.png (seamless horizontal tile, ≤96px tall, transparent PNG)
 - Populate index.html with actual event content (performer names, bio text, dance item details, photos) — use the editor for this

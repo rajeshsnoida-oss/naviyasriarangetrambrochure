@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Brochure Editor — Arangetram</title>
+  <!-- Import map: resolves bare specifiers used by the local background-removal index.mjs -->
+  <script type="importmap">
+  {
+    "imports": {
+      "lodash":            "https://esm.sh/lodash@4.17.21",
+      "ndarray":           "https://esm.sh/ndarray@1.0.19",
+      "onnxruntime-web":   "https://esm.sh/onnxruntime-web@1.17.3",
+      "zod":               "https://esm.sh/zod@3.23.8"
+    }
+  }
+  </script>
   <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.13/dist/css/grapes.min.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -175,7 +186,7 @@
       <p class="cdz-title">Drop a dancer photo here</p>
       <p>AI removes the background, keeping only the dancer</p>
       <button class="cutout-browse-btn" id="cutout-browse-btn">Choose photo…</button>
-      <p class="cutout-note" style="margin-top:14px;">First use downloads ~50 MB AI model — cached by browser forever after</p>
+      <p class="cutout-note" style="margin-top:14px;">First use downloads ~15 MB AI model — cached by browser forever after</p>
     </div>
     <div id="cutout-progress" class="cutout-progress hidden">
       <div class="cutout-spinner"></div>
@@ -812,29 +823,61 @@
       origName = file.name;
       origImg.src = URL.createObjectURL(file);
       showOnly(progressEl);
+      progressMsg.textContent = 'Loading AI library…';
+
+      // Local library — bare specifiers resolved via importmap in <head>.
+      // Model + WASM chunk files served locally from download-vendor.py output.
+      const LIB_URL    = '/src/editor/vendor/background-removal/dist/index.mjs';
+      const MODELS_URL = window.location.origin + '/src/editor/vendor/background-removal/models/';
 
       try {
         if (!removeBgFn) {
-          progressMsg.textContent = 'Downloading AI model (~50 MB, first use only)…';
-          const mod = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal/dist/browser-bundle.js');
-          removeBgFn = mod.removeBackground;
+          const mod = await import(LIB_URL);
+          removeBgFn = mod.removeBackground
+            ?? mod.default?.removeBackground
+            ?? (typeof mod.default === 'function' ? mod.default : null);
+          if (typeof removeBgFn !== 'function') {
+            throw new Error(
+              'removeBackground not found. Exports: [' + Object.keys(mod).join(', ') + ']'
+            );
+          }
         }
-        progressMsg.textContent = 'Removing background…';
+
+        let fetchDone = false;
+        progressMsg.textContent = 'Loading AI engine (first run: ~10 MB WASM download)…';
+
+        // After fetching completes, WASM compilation + session init can take 1-2 min.
+        const compilingTimer = setInterval(() => {
+          if (fetchDone) progressMsg.textContent = 'Compiling AI engine (first run takes 1-2 min)…';
+        }, 5000);
+
         resultBlob = await removeBgFn(file, {
-          publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal/dist/',
+          publicPath: MODELS_URL,
+          model: 'small',
+          output: { format: 'image/png', quality: 1 },
           progress: (key, current, total) => {
-            if (total > 0 && key.includes('fetch')) {
-              progressMsg.textContent = `Downloading model: ${Math.round(current / total * 100)}%`;
-            } else if (key === 'compute:inference') {
+            if (key === 'compute:inference') {
+              fetchDone = true;
+              clearInterval(compilingTimer);
               progressMsg.textContent = 'Running AI inference…';
+            } else if (total > 0 && key.startsWith('fetch:')) {
+              const label = key.includes('onnxruntime') ? 'AI engine' : 'Model';
+              const pct = Math.round(current / total * 100);
+              progressMsg.textContent = 'Loading ' + label + ': ' + pct + '%';
+              if (current >= total) fetchDone = true;
             }
           },
         });
+        clearInterval(compilingTimer);
         resultImg.src = URL.createObjectURL(resultBlob);
         showOnly(previewArea);
       } catch (err) {
+        console.error('[Cutout]', err);
         showOnly(dropZone);
-        alert('Cutout failed: ' + err.message);
+        alert(
+          'Cutout failed: ' + (err.message || err) + '\n\n' +
+          'Open browser DevTools (F12 → Console) for full details.'
+        );
       }
     }
 
