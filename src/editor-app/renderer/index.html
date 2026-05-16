@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' vendor: https://fonts.googleapis.com https://fonts.gstatic.com https://esm.sh;
+                 script-src  'self' 'unsafe-eval' https://esm.sh vendor: blob:;
+                 worker-src  blob: 'self';
+                 style-src   'self' 'unsafe-inline' https://fonts.googleapis.com;
+                 font-src    'self' https://fonts.gstatic.com;
+                 img-src     'self' data: blob:;
+                 connect-src 'self' vendor: https://esm.sh blob:;">
+
+  <!-- Google Fonts — all fonts used in the editor -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,700;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Josefin+Sans:ital,wght@0,300;0,400;0,700;1,400&family=Lato:ital,wght@0,300;0,400;0,700;1,400&family=Montserrat:wght@300;400;700&family=Nunito:wght@300;400;700&family=Open+Sans:wght@300;400;700&family=Poppins:wght@300;400;700&family=Quicksand:wght@400;700&family=Raleway:wght@300;400;700&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Lobster&family=Pacifico&family=Sacramento&family=Noto+Sans+Tamil:wght@400;700&display=swap" rel="stylesheet">
+
+  <title>Arangetram Brochure Editor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
+<header id="toolbar">
+  <span class="app-title">Brochure Editor</span>
+
+  <div class="tb-group" id="tb-add">
+    <button class="tb-btn" id="btn-add-text"  title="Add text box">T</button>
+    <button class="tb-btn" id="btn-add-image" title="Add image">⬜ Image</button>
+    <button class="tb-btn" id="btn-add-rect"  title="Add shape">▭ Shape</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- context: text selected -->
+  <div class="tb-group ctx-text" id="tb-text-props">
+    <select id="prop-font-family" title="Font family"></select>
+    <input id="prop-font-size" type="number" min="6" max="400" value="24" title="Font size (px)">
+    <button class="tb-btn toggle" id="prop-bold"      title="Bold"><b>B</b></button>
+    <button class="tb-btn toggle" id="prop-italic"    title="Italic"><i>I</i></button>
+    <button class="tb-btn toggle" id="prop-underline" title="Underline"><u>U</u></button>
+    <label class="color-pick" title="Text color">
+      A <input type="color" id="prop-fill" value="#ffffff">
+    </label>
+    <select id="prop-align" title="Align">
+      <option value="left">⬛ Left</option>
+      <option value="center">≡ Center</option>
+      <option value="right">⬛ Right</option>
+    </select>
+    <select id="prop-shadow" title="Text effect">
+      <option value="">No effect</option>
+      <option value="drop">Drop shadow</option>
+      <option value="soft">Soft shadow</option>
+      <option value="glow-gold">Gold glow</option>
+      <option value="glow-white">White glow</option>
+      <option value="custom">Custom glow…</option>
+    </select>
+    <label class="color-pick" id="prop-shadow-color-wrap" title="Glow color" style="display:none">
+      ✦ <input type="color" id="prop-shadow-color" value="#ffcc00">
+    </label>
+  </div>
+
+  <!-- context: image selected -->
+  <div class="tb-group ctx-image" id="tb-image-props">
+    <button class="tb-btn accent" id="btn-cutout" title="AI Background Removal">✂ Cutout</button>
+    <label>Opacity <input type="range" id="prop-opacity" min="0" max="100" value="100" style="width:80px"></label>
+    <label>Border
+      <input type="checkbox" id="prop-border-on">
+      <input type="color" id="prop-border-color" value="#000000">
+      <input type="number" id="prop-border-width" min="0" max="20" value="0" style="width:40px">px
+    </label>
+  </div>
+
+  <!-- context: shape selected -->
+  <div class="tb-group ctx-shape" id="tb-shape-props">
+    <label class="color-pick" title="Fill">Fill <input type="color" id="prop-shape-fill" value="#c9a84c"></label>
+    <label class="color-pick" title="Stroke">Stroke <input type="color" id="prop-shape-stroke" value="#000000"></label>
+    <input type="number" id="prop-shape-stroke-width" min="0" max="20" value="0" style="width:40px" title="Stroke width">px
+    <label>Opacity <input type="range" id="prop-shape-opacity" min="0" max="100" value="100" style="width:80px"></label>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="btn-copy"  title="Copy (Ctrl+C)">Copy</button>
+    <button class="tb-btn" id="btn-paste" title="Paste (Ctrl+V)">Paste</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="btn-bring-fwd" title="Bring forward">↑</button>
+    <button class="tb-btn" id="btn-send-back" title="Send backward">↓</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="btn-undo" title="Undo (Ctrl+Z)">↩</button>
+    <button class="tb-btn" id="btn-redo" title="Redo (Ctrl+Y)">↪</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="btn-zoom-out" title="Zoom out">−</button>
+    <span id="zoom-label">100%</span>
+    <button class="tb-btn" id="btn-zoom-in"  title="Zoom in">+</button>
+    <button class="tb-btn" id="btn-zoom-fit" title="Fit">Fit</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn primary" id="btn-save">Save</button>
+  <button class="tb-btn"         id="btn-preview">Preview</button>
+  <button class="tb-btn accent"  id="btn-export">Export HTML</button>
+</header>
+
+<!-- ── Main layout ─────────────────────────────────────────────────────── -->
+<div id="layout">
+
+  <!-- Left: section navigator -->
+  <aside id="section-panel">
+    <div id="section-panel-header">
+      <span>Sections</span>
+      <button id="btn-add-section" title="Add new section">+</button>
+    </div>
+    <ul id="section-list"><!-- populated by app.js --></ul>
+  </aside>
+
+  <!-- Centre: canvas host -->
+  <main id="canvas-host">
+    <div id="canvas-container">
+      <canvas id="c"></canvas>
+    </div>
+  </main>
+
+  <!-- Right: section properties -->
+  <aside id="section-props">
+    <h3>Section</h3>
+    <label>Label<input id="sp-label" type="text" placeholder="e.g. Cover"></label>
+    <label>Height (px)<input id="sp-height" type="number" min="200" max="4000" value="700"></label>
+    <label>BG Type
+      <select id="sp-bg-type">
+        <option value="solid">Solid color</option>
+        <option value="linear">Linear gradient</option>
+        <option value="radial">Radial gradient</option>
+        <option value="texture">Texture</option>
+      </select>
+    </label>
+    <div id="sp-bg-solid-row">
+      <input type="color" id="sp-bg-color" value="#ffffff">
+    </div>
+    <div id="sp-bg-grad-row" style="display:none">
+      <div class="bg-row">
+        <input type="color" id="sp-bg-grad1" value="#5a0a2e" title="Start color">
+        <span style="color:var(--text-dim)">→</span>
+        <input type="color" id="sp-bg-grad2" value="#c9a84c" title="End color">
+      </div>
+      <select id="sp-bg-grad-dir">
+        <option value="to bottom">↓ Down</option>
+        <option value="to right">→ Right</option>
+        <option value="to bottom right">↘ Diagonal</option>
+        <option value="to top right">↗ Anti-diag</option>
+      </select>
+    </div>
+    <div id="sp-bg-texture-row" style="display:none">
+      <select id="sp-bg-texture">
+        <option value="dots">Dots</option>
+        <option value="lines">Lines</option>
+        <option value="crosshatch">Crosshatch</option>
+        <option value="stripes">Stripes</option>
+        <option value="waves">Waves</option>
+      </select>
+      <div class="bg-row" style="margin-top:4px">
+        <label style="font-size:11px;color:var(--text-dim)">Pat
+          <input type="color" id="sp-bg-tex-fg" value="#c9a84c" title="Pattern color">
+        </label>
+        <label style="font-size:11px;color:var(--text-dim)">Base
+          <input type="color" id="sp-bg-tex-bg" value="#5a0a2e" title="Base color">
+        </label>
+      </div>
+    </div>
+    <div class="bg-row" style="margin-top:4px">
+      <button class="tb-btn" id="sp-bg-image-btn">Image…</button>
+      <button class="tb-btn" id="sp-bg-clear-btn" title="Clear bg image">✕</button>
+    </div>
+    <label>BG Size
+      <select id="sp-bg-size">
+        <option value="cover">Cover</option>
+        <option value="contain">Contain</option>
+        <option value="auto">Auto</option>
+      </select>
+    </label>
+    <hr>
+    <button class="tb-btn" id="btn-apply-bg-all" title="Copy this section's background to all other sections">Apply bg to all sections</button>
+    <button class="tb-btn danger" id="btn-delete-section">Delete Section</button>
+  </aside>
+
+</div>
+
+<!-- ── AI Cutout overlay ────────────────────────────────────────────────── -->
+<div id="cutout-overlay" style="display:none; position:fixed; inset:0; background:#0008; z-index:999; display:none; align-items:center; justify-content:center;">
+  <div style="background:#252526; border:1px solid #3e3e42; border-radius:8px; padding:32px 48px; text-align:center; color:#ccc; min-width:320px;">
+    <div id="cutout-spinner" style="font-size:32px; margin-bottom:12px;">⏳</div>
+    <div id="cutout-msg" style="font-size:14px;">Initialising AI…</div>
+    <div id="cutout-progress" style="margin-top:12px; height:6px; background:#3e3e42; border-radius:3px; overflow:hidden;">
+      <div id="cutout-bar" style="height:100%; background:#7b2d8b; width:0%; transition:width 0.3s;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Status bar ──────────────────────────────────────────────────────── -->
+<footer id="statusbar">
+  <span id="status-msg">Ready</span>
+  <span id="status-project"></span>
+</footer>
+
+<script src="../node_modules/fabric/dist/fabric.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

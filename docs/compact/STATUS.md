@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-13
+**Last updated**: 2026-05-15
 **Last drift-check**: 2026-05-12 — mode: design — 0 resolved, 2 skipped
 
 ## Done
@@ -16,6 +16,12 @@
 - 2026-05-12 Editor polish — cache-control fix (design tokens always fresh on reload); font picker ✓ selected-state indicator; Duplicate button with unique style classes per clone (independent resize); AI Cutout modal (@imgly/background-removal CDN, browser-side); D-011–D-013 logged
 - 2026-05-13 AI Cutout model download fixed — download-vendor.py rewrote to fetch from npm registry tarball; 211 MB model chunks extracted to vendor/background-removal/models/
 - 2026-05-13 Editor server fixes — .mjs/.wasm MIME types added; Unicode console crash removed; processFile switched to import map + local index.mjs for reliable onnxruntime-web WASM loading
+- 2026-05-14 Replaced GrapesJS web editor with Electron 33 + Fabric.js v5.3 desktop app — canvas editor with text/image/shape tools, undo/redo, section management, save/export-to-HTML; AI Cutout ported; D-016 logged
+- 2026-05-14 Editor preview fixes — text alignment (buildTransform, pixel positions, correct lineHeight, IText→white-space:pre / Textbox→white-space:pre-wrap); cutout images converted to data URLs for cross-process portability; D-017, D-018 logged
+- 2026-05-14 Editor auto-recovery — 2s debounced write to recovery.brochure in userData; startup: saved path → recovery snapshot → default template
+- 2026-05-15 Editor: text shadow/glow effects (drop, soft, gold glow, white glow, custom); section background gradients (linear/radial) and textures (5 patterns)
+- 2026-05-15 Editor: background propagation — "Apply bg to all sections" button; new sections inherit cover bg; loadFromJSON background-clear bug fixed
+- 2026-05-15 Editor: copy/paste (Ctrl+C/V + toolbar buttons) — copies all object properties including shadow; works cross-section
 
 ## In progress
 
@@ -23,8 +29,7 @@
 
 ## Next
 
-- **Use the editor**: `python src/editor/server.py` (or double-click `start.bat`) → open http://localhost:3033
-- Confirm Cutout works end-to-end with a real photo (first run takes 1-2 min — WASM compile)
+- **Use the editor**: double-click `src\editor-app\start.bat`
 - `/switch-phase development feedback` — implement feedback module (Google Apps Script integration; highest risk)
 - Provide border image assets: assets/images/border-kolam.png and assets/images/border-bottom.png (seamless horizontal tile, ≤96px tall, transparent PNG)
 - Populate index.html with actual event content (performer names, bio text, dance item details, photos) — use the editor for this

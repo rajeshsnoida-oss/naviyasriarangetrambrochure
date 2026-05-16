@@ -1,5 +1,60 @@
 # Decisions
 
+## D-021 — Cumulative paste offset resets on each new copy
+
+**Status**: Active
+**Date**: 2026-05-15
+**Context**: Repeated Ctrl+V pastes from the same clipboard would stack exactly on top of each other if placed at a fixed offset from the original position.
+**Decision**: `pasteOffset` increments by 20px on each paste and resets to 0 on each copy. Paste positions the new object at `original + pasteOffset`.
+**Why**: Matches the convention in most design tools (Figma, Illustrator) where repeated pastes cascade diagonally so each copy is visible and selectable.
+**Consequences**: If the user copies, pastes many times, then copies again, the offset resets — the next paste lands near the original. This is intentional and expected.
+
+## D-020 — Clipboard stores cloned Fabric objects (not serialised JSON)
+
+**Status**: Active
+**Date**: 2026-05-15
+**Context**: Copy/paste needed to preserve all object properties including custom ones (`_shadowPreset`, `_shadowColor`) and Fabric internals (shadow, font, etc.). Two options: store `obj.toObject()` JSON and re-enliven on paste, or store `obj.clone()` live Fabric objects.
+**Decision**: Store `obj.clone()` results in the `clipboard` array. Each paste re-clones from the stored clone (`src.clone()`), so the clipboard survives multiple pastes.
+**Why**: `obj.clone()` preserves all Fabric properties including computed ones without needing a round-trip through JSON serialisation. `fabric.util.enlivenObjects` (the JSON path) requires careful property include lists and is more brittle with custom properties. Clone is the idiomatic Fabric copy mechanism.
+**Consequences**: Clipboard is process-local memory — it doesn't survive app restart and can't be shared across app instances. Custom properties must be listed in the `propertiesToInclude` array passed to `clone()` to be preserved; omitting them silently drops them.
+
+## D-019 — Re-apply canvas background after loadFromJSON
+
+**Status**: Active
+**Date**: 2026-05-15
+**Context**: `switchSection` called `applyCanvasBg` before `canvas.loadFromJSON`. Fabric.js v5's `loadFromJSON` always resets `backgroundColor` to null when the JSON object doesn't contain a `background` key — since we only serialise `objects`, not the full canvas state, the background was wiped on every section switch.
+**Decision**: Move `applyCanvasBg` (and `setBackgroundImage`) into an `afterLoad` callback that runs inside the `loadFromJSON` completion handler, ensuring background is applied last.
+**Why**: Simpler than including background in the serialised JSON (which would require serialising Fabric Gradient/Pattern objects and deserialising them on load — fragile and format-coupled). The callback approach keeps background state in the section data model, not in Fabric's JSON.
+**Consequences**: Background is applied asynchronously after objects are loaded. For texture backgrounds (which use `fabric.Image.fromURL` internally), there is a brief flash of no-background between section switch and texture render — acceptable at event-brochure scale.
+
+## D-018 — buildTransform() to combine CSS rotation and horizontal scale
+
+**Status**: Active
+**Date**: 2026-05-14
+**Context**: Fabric text objects carry both `angle` (rotation) and `scaleX` (horizontal stretch from drag-resize handles). Exporting these to HTML naively produced two separate `transform:` declarations — `transform: rotate(30deg)` and `transform: scaleX(1.4)` — in the same style string. CSS ignores all but the last `transform:` declaration; rotation was silently dropped.
+**Decision**: A `buildTransform(angle, scaleX)` helper combines non-identity transforms into a single `transform: rotate(Xdeg) scaleX(Y);` declaration with a shared `transform-origin: top left`.
+**Why**: The CSS spec allows only one `transform:` property per element; multiple declarations cascade like any other property — last wins. Combining into one value is the only correct approach short of using CSS variables or SVG transforms.
+**Consequences**: Any new transform types (skew, scaleY, etc.) must go through `buildTransform` — callers cannot emit their own `transform:` alongside it. The helper skips identity values (angle=0, scaleX=1) to keep exported HTML clean.
+
+## D-017 — FileReader.readAsDataURL for cutout results
+
+**Status**: Active
+**Date**: 2026-05-14
+**Context**: After AI background removal, the result blob was stored as `URL.createObjectURL(blob)` = `blob:file:///...`. This URL is a memory reference in the Electron renderer process. When the project is exported or previewed in the system browser, the blob reference is invalid — images rendered as broken.
+**Decision**: Replace `URL.createObjectURL()` with `FileReader.readAsDataURL()` to convert the result blob to a base64 data URL before storing it in the Fabric canvas object.
+**Why**: A data URL is a self-contained string that encodes the image bytes directly. It survives serialisation to `.brochure` JSON, export to HTML, and opening in any process or browser. Blob URLs are process-local memory references that expire when the renderer closes.
+**Consequences**: Cutout images are stored as base64 in the `.brochure` project file (~33% size overhead vs raw bytes). A typical portrait cutout at 1–3 MB adds ~1.3–4 MB to the project file — acceptable for a single-event brochure. The `FileReader` API is async so the cutout flow gained a callback chain.
+
+## D-016 — Electron + Fabric.js as editor platform
+
+**Status**: Active
+**Date**: 2026-05-14
+**Context**: FR-14–FR-20 were originally satisfied by a GrapesJS web editor served via a Python HTTP server. In practice, cutout results stored as blob: URLs broke preview, and the HTTP server added friction (manual start, port conflicts). A canvas-native approach was needed to give precise pixel-level control over element positions, transforms, and export fidelity.
+**Decision**: Replace the GrapesJS web editor with an Electron 33 desktop app using Fabric.js v5.3 as the canvas library. Project state serialises to `.brochure` JSON (Fabric canvas + section metadata). Export renders Fabric canvas objects to absolute-positioned HTML/CSS.
+**Why**: Fabric.js gives direct access to every object's position, scale, rotation, font, and fill — no DOM-diffing or CSS cascade to reason about during export. Electron removes the local server entirely; native file dialogs and `fs` access replace the HTTP API.
+**Consequences**: Brochure content is edited in a separate desktop tool and exported to `index.html`; the two are decoupled. The old `src/editor/server.py` and `editor.html` are retained but no longer the primary path. Fabric.js canvas coordinates are design-space (unaffected by zoom), which simplifies export math.
+**Supersedes**: D-010
+
 ## D-015: npm registry tarball as model download source
 
 **Status**: Active
@@ -49,7 +104,8 @@
 - Manual crop/clip tool — rejected by user; no background removal, just framing change.
 
 ## D-010: GrapesJS as editor framework
-**Status**: Active
+**Status**: Superseded
+**Superseded by**: D-016
 **Date**: 2026-05-12
 **Context**: FR-14–FR-19 require a local visual editor supporting WYSIWYG text editing, image swapping, section reordering, card addition, and design token controls. A framework was needed to avoid building drag-reorder and DOM serialisation from scratch.
 **Decision**: GrapesJS — open-source drag-and-drop page builder that serialises to clean HTML/CSS; natively supports component blocks (sections), drag reorder, style manager (CSS custom properties), and image swapping. MIT licence, no bundler required.
