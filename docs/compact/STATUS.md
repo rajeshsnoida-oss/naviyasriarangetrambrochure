@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-15
+**Last updated**: 2026-05-16
 **Last drift-check**: 2026-05-12 — mode: design — 0 resolved, 2 skipped
 
 ## Done
@@ -22,6 +22,9 @@
 - 2026-05-15 Editor: text shadow/glow effects (drop, soft, gold glow, white glow, custom); section background gradients (linear/radial) and textures (5 patterns)
 - 2026-05-15 Editor: background propagation — "Apply bg to all sections" button; new sections inherit cover bg; loadFromJSON background-clear bug fixed
 - 2026-05-15 Editor: copy/paste (Ctrl+C/V + toolbar buttons) — copies all object properties including shadow; works cross-section
+- 2026-05-16 Editor: system clipboard paste into text boxes (Ctrl+V in editing mode via Electron IPC; Fabric's own paste handler bypassed)
+- 2026-05-16 Editor: preview fixed — `angle` undefined in objectToHTMLInline for image/shape objects
+- 2026-05-16 Editor: text box improvements — Textbox replaces IText (auto-wraps); paste constrains to page width; manual resize normalises scaleX/Y into real fontSize/width
 
 ## In progress
 

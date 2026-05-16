@@ -1,5 +1,32 @@
 # Decisions
 
+## D-024 — `normaliseTextScale`: convert scale handles to real `fontSize`/`width` on resize
+
+**Status**: Active
+**Date**: 2026-05-16
+**Context**: Dragging a Fabric resize handle on a text object stores the change as `scaleX`/`scaleY` rather than updating `width` or `fontSize`. This breaks word-wrap (`Textbox` wraps at `width`, not `width × scaleX`) and makes export CSS incorrect (export multiplies width × scaleX again, doubling the effect).
+**Decision**: On `object:modified` for text objects, if scale ≠ 1: compute `newFontSize = fontSize × scaleY`, `newWidth = width × scaleX` (clamped to page), set both, reset scale to 1 and call `initDimensions()`.
+**Why**: Normalised measurements make the object behave identically to a freshly-created one — word-wrap, export, and copy/paste all work from clean values. Keeping scaled rendering would require every downstream consumer (export, preview, paste) to account for the scale factor.
+**Consequences**: Resize handle behaves as "change font size + width" not "stretch glyphs." Font size rounds to the nearest pixel. Existing `i-text` objects in older saves are also normalised when the user resizes them.
+
+## D-023 — `fabric.Textbox` replaces `fabric.IText` for new text objects
+
+**Status**: Active
+**Date**: 2026-05-16
+**Context**: `IText` grows horizontally without wrapping; pasting multi-line or long text causes the object to overflow past page boundaries with no way to constrain it.
+**Decision**: `addText()` creates `fabric.Textbox` with `width: 300` instead of `fabric.IText`. `insertTextAtCursor` clamps width to the page right edge and calls `obj.initDimensions()` so the box auto-expands downward.
+**Why**: `Textbox` is Fabric's built-in wrapping text type — wraps at its `width` and auto-calculates height. Capping `IText` width doesn't produce wrapping; it just clips. Converting existing `IText` objects to `Textbox` on-the-fly during paste would require removing and re-adding them to the canvas.
+**Consequences**: New text objects serialise as `type: "textbox"` in `.brochure` saves. Existing saves with `type: "i-text"` still load correctly — Fabric handles both, and export/preview already checks for both types.
+
+## D-022 — Electron native clipboard IPC for system-clipboard text paste
+
+**Status**: Active
+**Date**: 2026-05-16
+**Context**: Needed to paste system clipboard text into a Fabric text object while in editing mode. Two approaches failed first: (1) letting Ctrl+V pass through to Fabric → garbled characters (Fabric's hidden-textarea paste handler misreads Electron's clipboard format); (2) capture-phase `paste` event listener reading `e.clipboardData.getData('text/plain')` → returned empty string in Electron's renderer.
+**Decision**: Expose Electron's native `clipboard.readText()` via IPC — `clipboard:readText` handler in `main.js`, `readClipboardText()` in `preload.js`. On Ctrl+V with a text object in editing mode, call this IPC method and insert the returned string via `insertTextAtCursor`.
+**Why**: Electron's `clipboard` module reads the system clipboard reliably regardless of renderer security context. `navigator.clipboard` is unavailable in non-secure contexts (Electron's custom `vendor:` protocol). The DOM paste event's `clipboardData` was unreliable in Electron's sandboxed renderer.
+**Consequences**: IPC round-trip on each paste keystroke (negligible latency). Paste always delivers plain text — no rich-text formatting is preserved (intentional for a layout tool).
+
 ## D-021 — Cumulative paste offset resets on each new copy
 
 **Status**: Active

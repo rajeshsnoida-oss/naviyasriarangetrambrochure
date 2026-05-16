@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('editorAPI', {
   openImages:   ()             => ipcRenderer.invoke('dialog:openImages'),
   exportDir:    ()             => ipcRenderer.invoke('dialog:exportDir'),
   copyImages:   (dir, imgs)   => ipcRenderer.invoke('dialog:copyImages', dir, imgs),
+  readClipboardText: ()        => ipcRenderer.invoke('clipboard:readText'),
   previewOpen:  (html)         => ipcRenderer.invoke('preview:open', html),
   getSettings:   ()             => ipcRenderer.invoke('settings:get'),
   setSettings:   (obj)         => ipcRenderer.invoke('settings:set', obj),

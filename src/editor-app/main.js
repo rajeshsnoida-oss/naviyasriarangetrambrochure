@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell, clipboard } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
@@ -175,6 +175,8 @@ ipcMain.handle('settings:set',      (_e, obj) => { writeSettings(obj); return tr
 ipcMain.handle('recovery:write',    (_e, data) => { try { fs.writeFileSync(RECOVERY_FILE, data, 'utf8'); } catch {} return true; });
 ipcMain.handle('recovery:read',     () => { try { return fs.readFileSync(RECOVERY_FILE, 'utf8'); } catch { return null; } });
 ipcMain.handle('recovery:clear',    () => { try { if (fs.existsSync(RECOVERY_FILE)) fs.unlinkSync(RECOVERY_FILE); } catch {} return true; });;
+
+ipcMain.handle('clipboard:readText',  () => clipboard.readText());
 
 ipcMain.handle('preview:open', async (_e, html) => {
   const tmp = path.join(os.tmpdir(), 'brochure-preview.html');

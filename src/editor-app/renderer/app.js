@@ -168,7 +168,7 @@ function initCanvas() {
   canvas.on('selection:created',  updateToolbar);
   canvas.on('selection:updated',  updateToolbar);
   canvas.on('selection:cleared',  updateToolbar);
-  canvas.on('object:modified',    onCanvasChange);
+  canvas.on('object:modified',    e => { normaliseTextScale(e.target); onCanvasChange(); });
   canvas.on('object:added',       onCanvasChange);
   canvas.on('object:removed',     onCanvasChange);
 }
@@ -647,8 +647,9 @@ function applyShape(prop, val) {
 
 /* ── Add objects ────────────────────────────────────────────────────────── */
 function addText() {
-  const t = new fabric.IText('Double-click to edit', {
+  const t = new fabric.Textbox('Double-click to edit', {
     left: 60, top: 60,
+    width: 300,
     fontFamily: 'Playfair Display',
     fontSize: 32,
     fill: '#000000',
@@ -1102,8 +1103,9 @@ body{background:#111}
 }
 
 function objectToHTMLInline(o, sec, usedFonts) {
-  const pxL = Math.round(o.left) + 'px';
-  const pxT = Math.round(o.top)  + 'px';
+  const pxL  = Math.round(o.left) + 'px';
+  const pxT  = Math.round(o.top)  + 'px';
+  const angle = o.angle ? `transform:rotate(${o.angle}deg);transform-origin:center;` : '';
   const opacity = (o.opacity != null && o.opacity < 1) ? `opacity:${o.opacity.toFixed(2)};` : '';
 
   if (o.type === 'i-text' || o.type === 'textbox') {
@@ -1170,13 +1172,68 @@ function bindKeyboard() {
     if (ctrl && e.key === 'y') { e.preventDefault(); redo(); }
     if (ctrl && e.key === 's') { e.preventDefault(); saveProject(e.shiftKey); }
     if (ctrl && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
-    if (ctrl && e.key === 'c') { e.preventDefault(); copySelected(); }
-    if (ctrl && e.key === 'v') { e.preventDefault(); pasteClipboard(); }
+    const activeObj   = canvas.getActiveObject();
+    const textEditing = activeObj?.isEditing;
+    if (ctrl && e.key === 'c' && !textEditing) { e.preventDefault(); copySelected(); }
+    if (ctrl && e.key === 'v') {
+      e.preventDefault();
+      if (textEditing) {
+        window.editorAPI.readClipboardText().then(text => {
+          if (!text) return;
+          insertTextAtCursor(activeObj, text);
+          canvas.renderAll();
+          onCanvasChange();
+        }).catch(() => {});
+      } else {
+        pasteClipboard();
+      }
+    }
     if ((e.key === 'Delete' || e.key === 'Backspace') && document.activeElement === document.body) deleteSelected();
     if (ctrl && e.key === '=') { e.preventDefault(); setZoom(zoom + ZOOM_STEP); }
     if (ctrl && e.key === '-') { e.preventDefault(); setZoom(zoom - ZOOM_STEP); }
     if (ctrl && e.key === '0') { e.preventDefault(); zoomFit(); }
   });
+
+}
+
+function insertTextAtCursor(obj, text) {
+  const start  = obj.selectionStart;
+  const end    = obj.selectionEnd;
+  const before = obj.text.slice(0, start);
+  const after  = obj.text.slice(end);
+  obj.text = before + text + after;
+  const newPos = start + text.length;
+  obj.selectionStart = newPos;
+  obj.selectionEnd   = newPos;
+  if (obj.hiddenTextarea) {
+    obj.hiddenTextarea.value = obj.text;
+    obj.hiddenTextarea.selectionStart = newPos;
+    obj.hiddenTextarea.selectionEnd   = newPos;
+  }
+  if (obj.type === 'textbox') {
+    // Clamp width so text stays inside the page, then let Textbox auto-expand height.
+    const maxW = CANVAS_W - Math.round(obj.left) - 10;
+    if ((obj.width || 0) > maxW) obj.set('width', maxW);
+    obj.initDimensions();
+  }
+}
+
+// When a text object is manually resized by dragging handles, Fabric stores the
+// change as scaleX/scaleY rather than updated width/fontSize. Normalise those
+// back to real measurements so further edits and word-wrap stay predictable.
+function normaliseTextScale(obj) {
+  if (!obj || (obj.type !== 'i-text' && obj.type !== 'textbox')) return;
+  const sx = obj.scaleX || 1;
+  const sy = obj.scaleY || 1;
+  if (Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return;
+  const newFontSize = Math.max(6, Math.round((obj.fontSize || 16) * sy));
+  const newWidth    = Math.min(
+    Math.round((obj.width || 200) * sx),
+    CANVAS_W - Math.round(obj.left) - 10
+  );
+  obj.set({ fontSize: newFontSize, width: newWidth, scaleX: 1, scaleY: 1 });
+  if (obj.type === 'textbox') obj.initDimensions();
+  canvas.renderAll();
 }
 
 function deleteSelected() {
