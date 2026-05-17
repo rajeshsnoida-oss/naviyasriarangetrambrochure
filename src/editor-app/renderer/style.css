@@ -210,6 +210,19 @@ body {
   flex-shrink: 0;
 }
 .section-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.section-move-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 9px;
+  padding: 0 2px;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.section-move-btn:hover:not(:disabled) { opacity: 1; color: var(--accent); }
+.section-move-btn:disabled { opacity: 0.2; cursor: default; }
 
 /* ── Canvas host (centre) ───────────────────────────────────────────────── */
 #canvas-host {

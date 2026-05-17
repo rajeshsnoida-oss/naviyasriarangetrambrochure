@@ -194,8 +194,24 @@ function renderSectionList() {
     label.className = 'section-label';
     label.textContent = sec.label;
 
+    const btnUp = document.createElement('button');
+    btnUp.className = 'section-move-btn';
+    btnUp.textContent = '▲';
+    btnUp.title = 'Move up';
+    btnUp.disabled = i === 0;
+    btnUp.addEventListener('click', e => { e.stopPropagation(); moveSectionTo(i, i - 1); });
+
+    const btnDown = document.createElement('button');
+    btnDown.className = 'section-move-btn';
+    btnDown.textContent = '▼';
+    btnDown.title = 'Move down';
+    btnDown.disabled = i === sections.length - 1;
+    btnDown.addEventListener('click', e => { e.stopPropagation(); moveSectionTo(i, i + 1); });
+
     li.appendChild(handle);
     li.appendChild(label);
+    li.appendChild(btnUp);
+    li.appendChild(btnDown);
     li.addEventListener('click', () => switchSection(i));
     li.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
     li.addEventListener('drop', e => {
@@ -271,7 +287,7 @@ function switchSection(idx) {
   activeSec = idx;
   const sec = sections[idx];
 
-  canvas.setHeight(sec.height);
+  canvas.setHeight(sec.height * zoom);
 
   // loadFromJSON clears backgroundColor — applyCanvasBg must run AFTER it completes.
   const afterLoad = () => {
@@ -447,15 +463,19 @@ function bindSectionProps() {
 
 /* ── Add section ────────────────────────────────────────────────────────── */
 function addSection() {
-  const label = prompt('Section name:', 'New Section');
-  if (!label) return;
   saveCurrentSectionObjects();
+  const label   = 'Section ' + (sections.length + 1);
   const coverBg = sections.length ? bgSettingsFrom(sections[0]) : {};
   sections.push({ label, height: 600, objects: [], ...coverBg });
   history.push(['[]']);
   historyIdx.push(0);
   switchSection(sections.length - 1);
   markDirty();
+  // Let the user rename immediately via the section panel
+  setTimeout(() => {
+    const inp = document.getElementById('sp-label');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 50);
 }
 
 /* ── Toolbar context sensitivity ────────────────────────────────────────── */
@@ -998,7 +1018,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames) {
     const fi  = o.fontStyle   || 'normal';
     const td  = o.underline   ? 'underline' : 'none';
     const col = safeColor(o.fill, '#000000');
-    const ta  = o.textAlign   || 'left';
+    const ta  = (o.textAlign === 'justify-left') ? 'justify' : (o.textAlign || 'left');
     const lh  = (o.lineHeight || 1.16).toFixed(2);
     const w   = Math.round((o.width || 200) * sx);
     const ws  = (o.type === 'textbox') ? 'pre-wrap' : 'pre';
@@ -1018,7 +1038,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames) {
     const h      = Math.round((o.height || 100) * (o.scaleY || 1));
     const border = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
     return `    <img src="images/${name}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
-      `width:${w}px;height:${h}px;object-fit:contain;${border}${angle}${opacity}">`;
+      `width:${w}px;height:${h}px;object-fit:contain;${border}${rotateCss}${opacity}">`;
   }
 
   if (['rect','circle','ellipse','triangle'].includes(o.type)) {
@@ -1029,7 +1049,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames) {
     const bw = o.strokeWidth || 0;
     const br = (o.type === 'circle' || o.type === 'ellipse') ? 'border-radius:50%;' : '';
     return `    <div style="position:absolute;left:${pxL};top:${pxT};width:${w}px;height:${h}px;` +
-      `background:${bg};border:${bw}px solid ${bc};${br}${angle}${opacity}"></div>`;
+      `background:${bg};border:${bw}px solid ${bc};${br}${rotateCss}${opacity}"></div>`;
   }
   return '';
 }
@@ -1117,7 +1137,7 @@ function objectToHTMLInline(o, sec, usedFonts) {
     const fi  = o.fontStyle   || 'normal';
     const td  = o.underline   ? 'underline' : 'none';
     const col = safeColor(o.fill, '#000000');
-    const ta  = o.textAlign   || 'left';
+    const ta  = (o.textAlign === 'justify-left') ? 'justify' : (o.textAlign || 'left');
     const lh  = (o.lineHeight || 1.16).toFixed(2);
     const w   = Math.round((o.width || 200) * sx);
     const ws  = (o.type === 'textbox') ? 'pre-wrap' : 'pre';

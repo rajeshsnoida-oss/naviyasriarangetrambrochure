@@ -25,6 +25,9 @@
 - 2026-05-16 Editor: system clipboard paste into text boxes (Ctrl+V in editing mode via Electron IPC; Fabric's own paste handler bypassed)
 - 2026-05-16 Editor: preview fixed — `angle` undefined in objectToHTMLInline for image/shape objects
 - 2026-05-16 Editor: text box improvements — Textbox replaces IText (auto-wraps); paste constrains to page width; manual resize normalises scaleX/Y into real fontSize/width
+- 2026-05-16 Editor: add-section button fixed (prompt→auto-name); ▲▼ reorder buttons added to section list
+- 2026-05-16 Editor: export HTML fixed — objectToHTML used undefined `angle` for images/shapes (rotateCss was defined but not used); switchSection canvas height corrected to account for zoom
+- 2026-05-16 Editor: justify text alignment added (Fabric justify-left; CSS text-align:justify)
 
 ## In progress
 

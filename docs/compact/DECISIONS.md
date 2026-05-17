@@ -1,5 +1,23 @@
 # Decisions
 
+## D-026 — ▲▼ explicit reorder buttons added alongside drag-and-drop handle
+
+**Status**: Active
+**Date**: 2026-05-16
+**Context**: The ⠿ drag handle was already in the section list but users didn't discover it. The "Need option to re-order sections" request confirmed the drag affordance was invisible in practice.
+**Decision**: Each section row now has ▲ and ▼ buttons (▲ disabled on first row, ▼ disabled on last) that call `moveSectionTo` directly. The drag handle is preserved for power users.
+**Why**: Explicit buttons are always discoverable; drag-and-drop in Electron can also be unreliable across different zoom/DPI settings. Belt-and-suspenders costs one line of CSS and two event listeners.
+**Consequences**: Section rows are slightly wider. If sections exceed panel height, both buttons and handle are accessible via scroll.
+
+## D-025 — `justify-left` used for justified text alignment instead of `justify`
+
+**Status**: Active
+**Date**: 2026-05-16
+**Context**: Fabric.js `textAlign: 'justify'` stretches every line including the last, producing wide word gaps on short final lines (e.g. a paragraph ending with one word stretched across the full width).
+**Decision**: Dropdown option uses `value="justify-left"` — Fabric's variant that justifies all lines except the last, which is left-aligned. In HTML export, `justify-left` maps to CSS `text-align:justify` (CSS already leaves the last line un-stretched by default).
+**Why**: Matches typographic convention and user expectation. `justify` (all-lines) is almost never the right choice for body text. `justify-left` is a first-class Fabric v5 value, not a workaround.
+**Consequences**: Any existing saved objects with `textAlign: 'justify'` (plain) will still render with all-line stretch in Fabric (until the user reselects the option). New objects use `justify-left`. Export correctly emits `text-align:justify` for both values.
+
 ## D-024 — `normaliseTextScale`: convert scale handles to real `fontSize`/`width` on resize
 
 **Status**: Active
