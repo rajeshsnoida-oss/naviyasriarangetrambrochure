@@ -996,6 +996,23 @@ ${sectionsHTML}
   setStatus('Exported to ' + destPath);
 }
 
+/* Fabric stores left/top at the object's originX/originY point.
+   CSS position:absolute always needs the top-left corner. */
+function fabricLeft(o) {
+  const w  = (o.width  || 0) * (o.scaleX || 1);
+  const ox = o.originX || 'left';
+  if (ox === 'center') return Math.round(o.left - w / 2);
+  if (ox === 'right')  return Math.round(o.left - w);
+  return Math.round(o.left);
+}
+function fabricTop(o) {
+  const h  = (o.height || 0) * (o.scaleY || 1);
+  const oy = o.originY || 'top';
+  if (oy === 'center') return Math.round(o.top - h / 2);
+  if (oy === 'bottom') return Math.round(o.top - h);
+  return Math.round(o.top);
+}
+
 function buildTransform(angle, scaleX) {
   const parts = [];
   if (angle) parts.push(`rotate(${angle}deg)`);
@@ -1004,9 +1021,9 @@ function buildTransform(angle, scaleX) {
 }
 
 function objectToHTML(o, sec, usedFonts, images, seenNames) {
-  const pxL = Math.round(o.left) + 'px';
-  const pxT = Math.round(o.top)  + 'px';
-  const rotateCss = o.angle  ? `transform:rotate(${o.angle}deg);transform-origin:50% 50%;` : '';
+  const pxL = fabricLeft(o) + 'px';
+  const pxT = fabricTop(o)  + 'px';
+  const rotateCss = o.angle  ? `transform:rotate(${o.angle}deg);transform-origin:top left;` : '';
   const opacity   = (o.opacity != null && o.opacity < 1) ? `opacity:${o.opacity.toFixed(2)};` : '';
 
   if (o.type === 'i-text' || o.type === 'textbox') {
@@ -1038,7 +1055,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames) {
     const h      = Math.round((o.height || 100) * (o.scaleY || 1));
     const border = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
     return `    <img src="images/${name}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
-      `width:${w}px;height:${h}px;object-fit:contain;${border}${rotateCss}${opacity}">`;
+      `width:${w}px;height:${h}px;${border}${rotateCss}${opacity}">`;
   }
 
   if (['rect','circle','ellipse','triangle'].includes(o.type)) {
@@ -1123,9 +1140,9 @@ body{background:#111}
 }
 
 function objectToHTMLInline(o, sec, usedFonts) {
-  const pxL  = Math.round(o.left) + 'px';
-  const pxT  = Math.round(o.top)  + 'px';
-  const angle = o.angle ? `transform:rotate(${o.angle}deg);transform-origin:center;` : '';
+  const pxL  = fabricLeft(o) + 'px';
+  const pxT  = fabricTop(o)  + 'px';
+  const angle = o.angle ? `transform:rotate(${o.angle}deg);transform-origin:top left;` : '';
   const opacity = (o.opacity != null && o.opacity < 1) ? `opacity:${o.opacity.toFixed(2)};` : '';
 
   if (o.type === 'i-text' || o.type === 'textbox') {
@@ -1160,7 +1177,7 @@ function objectToHTMLInline(o, sec, usedFonts) {
     // With the cutout fix they should never appear here, but guard just in case.
     if (!src || src.startsWith('blob:')) return '';
     return `    <img src="${src}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
-      `width:${w}px;height:${h}px;object-fit:contain;${border}${angle}${opacity}">`;
+      `width:${w}px;height:${h}px;${border}${angle}${opacity}">`;
   }
 
   if (['rect','circle','ellipse','triangle'].includes(o.type)) {

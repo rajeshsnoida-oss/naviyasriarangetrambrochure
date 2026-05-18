@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-16
+**Last updated**: 2026-05-17
 **Last drift-check**: 2026-05-12 — mode: design — 0 resolved, 2 skipped
 
 ## Done
@@ -28,6 +28,7 @@
 - 2026-05-16 Editor: add-section button fixed (prompt→auto-name); ▲▼ reorder buttons added to section list
 - 2026-05-16 Editor: export HTML fixed — objectToHTML used undefined `angle` for images/shapes (rotateCss was defined but not used); switchSection canvas height corrected to account for zoom
 - 2026-05-16 Editor: justify text alignment added (Fabric justify-left; CSS text-align:justify)
+- 2026-05-17 Editor: HTML preview/export position fixes — origin-aware fabricLeft/Top helpers; transform-origin:top left for rotated images/shapes; removed object-fit:contain from image render (was causing border/divider images to appear visually misplaced); D-027–D-029 logged
 
 ## In progress
 

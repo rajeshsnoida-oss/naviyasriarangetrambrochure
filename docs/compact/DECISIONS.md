@@ -1,5 +1,32 @@
 # Decisions
 
+## D-029 — Standardize `transform-origin:top left` for all rotated objects in HTML
+
+**Status**: Active
+**Date**: 2026-05-17
+**Context**: `objectToHTML` used `transform-origin:50% 50%` for rotated images/shapes; `objectToHTMLInline` used `transform-origin:center`. Text already used `transform-origin:top left` via `buildTransform`. Fabric rotates objects around their origin point (default: top-left corner of the object). The mismatched CSS transform-origin caused rotated images and shapes to pivot around the wrong point relative to the canvas.
+**Decision**: Standardize to `transform-origin:top left` across all object types and both render paths.
+**Why**: Fabric's rotation anchor = origin point = top-left (for default objects). CSS must use the same pivot point to produce identical visual positioning. `center`/`50% 50%` was wrong for all non-zero angles.
+**Consequences**: Rotated objects now pivot from their top-left corner in HTML, matching the canvas. If a future object type is created with `originX:'center'`, the render functions would need object-type-aware transform-origin.
+
+## D-028 — Origin-aware `fabricLeft`/`fabricTop` helpers for HTML position
+
+**Status**: Active
+**Date**: 2026-05-17
+**Context**: Both `objectToHTML` and `objectToHTMLInline` computed CSS `left`/`top` as `Math.round(o.left)` / `Math.round(o.top)`. Fabric stores these coordinates at the object's `originX`/`originY` point (default top-left), but CSS `position:absolute` always positions from the top-left corner. If an object ever has `originX:'center'`, its HTML position would be off by half its width.
+**Decision**: Add `fabricLeft(o)` / `fabricTop(o)` helpers that adjust for `originX`/`originY`. Both render paths use these instead of raw `o.left`/`o.top`.
+**Why**: Current objects all use default origin so this is a safety fix (no-op today), but Fabric can produce non-default origins via programmatic manipulation. Centralizing the correction in helpers means future object types or creation paths don't silently misplace.
+**Consequences**: Any future code adding objects must be aware that `left`/`top` in saved JSON are origin-relative. The helpers must be kept in sync with Fabric's origin semantics.
+
+## D-027 — Remove `object-fit:contain` from image HTML render
+
+**Status**: Active
+**Date**: 2026-05-17
+**Context**: HTML preview and export rendered images with `object-fit:contain`, which constrains the image to its natural aspect ratio and centers it within the CSS box. When a user stretches an image non-uniformly in Fabric (e.g., a border/divider image scaled to full page width), the HTML image appeared visually offset/misplaced because the pixel-accurate `width`/`height` were set but the actual image content was re-constrained and re-centered.
+**Decision**: Remove `object-fit:contain`; rely on the browser default (equivalent to `object-fit:fill`) so the image stretches to exactly the CSS `width`/`height` dimensions.
+**Why**: Fabric scales images by `scaleX`/`scaleY` — it stretches without preserving aspect ratio. The HTML render must match this behavior. `object-fit:fill` (the CSS default for `<img>`) is the correct equivalent. `object-fit:contain` was actively wrong for non-uniform scales.
+**Consequences**: Images in HTML output stretch to their Fabric-scaled dimensions. If a future feature needs aspect-ratio-preserving image placement, that must be handled at the Fabric level (uniform scale), not the HTML render level.
+
 ## D-026 — ▲▼ explicit reorder buttons added alongside drag-and-drop handle
 
 **Status**: Active
