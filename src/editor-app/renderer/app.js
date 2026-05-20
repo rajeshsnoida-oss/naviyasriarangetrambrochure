@@ -174,7 +174,17 @@ function initCanvas() {
   canvas.on('selection:created',  updateToolbar);
   canvas.on('selection:updated',  updateToolbar);
   canvas.on('selection:cleared',  updateToolbar);
-  canvas.on('object:modified',    e => { normaliseTextScale(e.target); onCanvasChange(); });
+  canvas.on('object:modified', e => {
+    const obj = e.target;
+    if (obj) {
+      // Snap to integer canvas coordinates so positions stay on exact CSS
+      // pixels at zoom=1, preventing sub-pixel antialiasing of text edges.
+      obj.set({ left: Math.round(obj.left), top: Math.round(obj.top) });
+      obj.setCoords();
+    }
+    normaliseTextScale(obj);
+    onCanvasChange();
+  });
   canvas.on('object:added',       onCanvasChange);
   canvas.on('object:removed',     onCanvasChange);
 }
@@ -306,6 +316,15 @@ function switchSection(idx) {
         });
       }, { crossOrigin: 'anonymous' });
     }
+    // Re-render once web fonts finish downloading so text layout uses correct
+    // metrics (Fabric renders with the fallback font on the first frame if the
+    // web font hasn't arrived yet, producing wrong line-breaks and blurry glyphs).
+    document.fonts.ready.then(() => {
+      canvas.getObjects().forEach(obj => {
+        if (obj.type === 'textbox' || obj.type === 'i-text') obj._forceClearCache = true;
+      });
+      canvas.requestRenderAll();
+    });
   };
 
   canvas.off('object:added',   onCanvasChange);
@@ -876,9 +895,11 @@ function setZoom(z) {
 
 function zoomFit() {
   const host = document.getElementById('canvas-host');
-  // Fit to width only — canvas-host has overflow:auto so sections scroll vertically.
-  // Fitting height would shrink tall sections to unreadable zoom levels.
-  const z = (host.clientWidth - 48) / CANVAS_W;
+  // Never zoom above 1.0: zooming in pushes every object position to a
+  // non-integer CSS pixel (e.g. left=60 → 71.16px at 1.19×), which
+  // antialiases text edges and makes it look blurry. At 1.0 the canvas
+  // scrolls horizontally only when the host is narrower than CANVAS_W.
+  const z = Math.min(1.0, (host.clientWidth - 48) / CANVAS_W);
   setZoom(z);
 }
 
