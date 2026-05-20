@@ -32,8 +32,6 @@ const FONTS = [
   { name: 'Sacramento',          cat: 'Script' },
   { name: 'Pacifico',            cat: 'Decorative' },
   { name: 'Lobster',             cat: 'Decorative' },
-  // ── Tamil ──
-  { name: 'Noto Sans Tamil',     cat: 'Tamil' },
   // ── System ──
   { name: 'Georgia',             cat: 'System' },
   { name: 'Times New Roman',     cat: 'System' },
@@ -176,12 +174,7 @@ function initCanvas() {
   canvas.on('selection:cleared',  updateToolbar);
   canvas.on('object:modified', e => {
     const obj = e.target;
-    if (obj) {
-      // Snap to integer canvas coordinates so positions stay on exact CSS
-      // pixels at zoom=1, preventing sub-pixel antialiasing of text edges.
-      obj.set({ left: Math.round(obj.left), top: Math.round(obj.top) });
-      obj.setCoords();
-    }
+    if (obj) snapObjToPixel(obj);
     normaliseTextScale(obj);
     onCanvasChange();
   });
@@ -332,6 +325,10 @@ function switchSection(idx) {
   canvas.remove(...canvas.getObjects());
   if (sec.objects && sec.objects.length) {
     canvas.loadFromJSON({ version: '5.3.0', objects: sec.objects }, () => {
+      // Snap every loaded object to physical-pixel-aligned coordinates.
+      // Objects created or dragged at zoom>1 end up with fractional left/top
+      // values that produce non-integer buffer pixels → blurry text edges.
+      canvas.getObjects().forEach(snapObjToPixel);
       afterLoad();
       canvas.on('object:added',   onCanvasChange);
       canvas.on('object:removed', onCanvasChange);
@@ -1397,6 +1394,21 @@ function insertTextAtCursor(obj, text) {
 // When a text object is manually resized by dragging handles, Fabric stores the
 // change as scaleX/scaleY rather than updated width/fontSize. Normalise those
 // back to real measurements so further edits and word-wrap stay predictable.
+// Snap an object's left/top so they land on integer physical pixels.
+// At Windows 125 % scaling (DPR=1.25) an object at left=84.3 maps to
+// buffer pixel 105.375 — non-integer → blurry text edges.  After snapping:
+// left = Math.round(84.3 * 1.25) / 1.25 = 84.8, buffer pixel = 106. ✓
+function snapObjToPixel(obj) {
+  if (!obj) return;
+  const dpr = window.devicePixelRatio || 1;
+  const sl  = Math.round(obj.left * dpr) / dpr;
+  const st  = Math.round(obj.top  * dpr) / dpr;
+  if (sl !== obj.left || st !== obj.top) {
+    obj.set({ left: sl, top: st });
+    obj.setCoords();
+  }
+}
+
 function normaliseTextScale(obj) {
   if (!obj || (obj.type !== 'i-text' && obj.type !== 'textbox')) return;
   const sx = obj.scaleX || 1;
