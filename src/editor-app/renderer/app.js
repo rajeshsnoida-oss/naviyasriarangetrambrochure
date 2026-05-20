@@ -298,7 +298,7 @@ function switchSection(idx) {
           scaleX: CANVAS_W / img.width,
           scaleY: sec.height / img.height,
         });
-      });
+      }, { crossOrigin: 'anonymous' });
     }
   };
 
@@ -426,14 +426,15 @@ function bindSectionProps() {
     if (activeSec < 0) return;
     const imgs = await window.editorAPI.openImages();
     if (!imgs.length) return;
-    const { dataUrl } = imgs[0];
-    sections[activeSec].bgImage = dataUrl;
-    fabric.Image.fromURL(dataUrl, img => {
+    const assetName = await window.editorAPI.importAsset(imgs[0].srcPath);
+    const assetUrl  = 'asset://' + assetName;
+    sections[activeSec].bgImage = assetUrl;
+    fabric.Image.fromURL(assetUrl, img => {
       canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
         scaleX: CANVAS_W / img.width,
         scaleY: sections[activeSec].height / img.height,
       });
-    });
+    }, { crossOrigin: 'anonymous' });
     markDirty();
   });
   document.getElementById('sp-bg-clear-btn').addEventListener('click', () => {
@@ -681,16 +682,17 @@ function addText() {
 
 async function addImages() {
   const imgs = await window.editorAPI.openImages();
-  imgs.forEach(({ name, dataUrl }) => {
-    fabric.Image.fromURL(dataUrl, img => {
+  for (const { name, srcPath } of imgs) {
+    const assetName = await window.editorAPI.importAsset(srcPath);
+    fabric.Image.fromURL('asset://' + assetName, img => {
       const scale = Math.min(400 / img.width, 400 / img.height, 1);
       img.set({ left: 80, top: 80, scaleX: scale, scaleY: scale, strokeWidth: 0 });
       img.name = name;
       canvas.add(img);
       canvas.setActiveObject(img);
       canvas.renderAll();
-    });
-  });
+    }, { crossOrigin: 'anonymous' });
+  }
 }
 
 function addRect() {
@@ -738,8 +740,13 @@ async function cutoutImage() {
       if (typeof removeBgFn !== 'function') throw new Error('removeBackground not exported');
     }
 
-    // Convert the Fabric image's data-URL src to a Blob without fetch()
-    const blob = dataUrlToBlob(obj.getSrc());
+    // Draw the canvas image element to a temp canvas → blob (works for any src, incl. asset://)
+    const el = obj.getElement();
+    const tmpC = document.createElement('canvas');
+    tmpC.width = el.naturalWidth || el.width;
+    tmpC.height = el.naturalHeight || el.height;
+    tmpC.getContext('2d').drawImage(el, 0, 0);
+    const blob = await new Promise(res => tmpC.toBlob(res, 'image/png'));
 
     showCutoutOverlay(true, 'Running AI background removal…', 10);
 
@@ -759,12 +766,11 @@ async function cutoutImage() {
 
     showCutoutOverlay(true, 'Applying result…', 97);
 
-    // Convert blob → data URL so the src survives serialisation and browser preview.
-    // blob: URLs are Electron-process-local and become dead links in any other context.
+    // Save cutout result as an asset file so it doesn't bloat the project JSON.
     const reader = new FileReader();
-    reader.onload = () => {
-      const resultDataUrl = reader.result;
-      fabric.Image.fromURL(resultDataUrl, newImg => {
+    reader.onload = async () => {
+      const assetName = await window.editorAPI.importAssetData(reader.result, 'png');
+      fabric.Image.fromURL('asset://' + assetName, newImg => {
         newImg.set({
           left: obj.left, top: obj.top,
           scaleX: obj.scaleX * (obj.width / newImg.width),
@@ -778,7 +784,7 @@ async function cutoutImage() {
         onCanvasChange();
         showCutoutOverlay(false);
         setStatus('Cutout done!');
-      });
+      }, { crossOrigin: 'anonymous' });
     };
     reader.onerror = () => { showCutoutOverlay(false); setStatus('Cutout failed: could not read result blob'); };
     reader.readAsDataURL(resultBlob);
@@ -801,12 +807,17 @@ function pushHistory() {
   historyIdx[activeSec] = h.length - 1;
 }
 
+const RECOVERY_MAX_BYTES = 10 * 1024 * 1024; // 10 MB — skip recovery if project is too large
 let _recoveryTimer = null;
 function scheduleRecovery() {
   clearTimeout(_recoveryTimer);
   _recoveryTimer = setTimeout(() => {
     saveCurrentSectionObjects();
     const snap = JSON.stringify({ version: 1, canvasW: CANVAS_W, sections });
+    if (snap.length > RECOVERY_MAX_BYTES) {
+      setStatus('Project is large — auto-recovery skipped. Save manually (Ctrl+S).');
+      return;
+    }
     window.editorAPI.writeRecovery(snap).catch(() => {});
   }, 2000);
 }
@@ -872,6 +883,7 @@ async function saveProject(saveAs) {
     const p = await window.editorAPI.saveProject(projectPath);
     if (!p) return;
     projectPath = p;
+    await window.editorAPI.setAssetDir(projectPath); // migrate temp assets → project assets folder
   }
   await window.editorAPI.writeFile(projectPath, JSON.stringify({ version: 1, canvasW: CANVAS_W, sections }, null, 2));
   await window.editorAPI.setSettings({ lastProjectPath: projectPath });
@@ -886,24 +898,57 @@ async function openProject() {
   const result = await window.editorAPI.openProject();
   if (!result) return;
   projectPath = result.path;
-  loadData(JSON.parse(result.data));
+  await window.editorAPI.setAssetDir(projectPath);
+  await loadData(JSON.parse(result.data));
   await window.editorAPI.setSettings({ lastProjectPath: projectPath });
   window.editorAPI.clearRecovery().catch(() => {});
 }
 
-function newProject() {
+async function newProject() {
   if (dirty && !confirm('Unsaved changes — start new project?')) return;
   projectPath = null;
+  await window.editorAPI.clearAssetDir();
   initSections(DEFAULT_SECTIONS);
   dirty = false;
   updateTitle();
 }
 
-function loadData(data) {
-  initSections(data.sections || DEFAULT_SECTIONS);
-  dirty = false;
+async function loadData(data) {
+  const secs = data.sections || DEFAULT_SECTIONS;
+
+  // One-time migration: extract any inline base64 images to asset files.
+  let total = 0;
+  for (const sec of secs) {
+    if (sec.bgImage && sec.bgImage.startsWith('data:')) total++;
+    for (const obj of (sec.objects || [])) {
+      if (obj.type === 'image' && obj.src && obj.src.startsWith('data:')) total++;
+    }
+  }
+  if (total > 0) {
+    setStatus(`Migrating ${total} embedded images to files — this happens once…`);
+    let done = 0;
+    for (const sec of secs) {
+      if (sec.bgImage && sec.bgImage.startsWith('data:')) {
+        const ext  = (sec.bgImage.match(/data:image\/([a-z+]+)/) || [])[1] || 'png';
+        const name = await window.editorAPI.importAssetData(sec.bgImage, ext);
+        sec.bgImage = 'asset://' + name;
+        setStatus(`Migrating images… ${++done}/${total}`);
+      }
+      for (const obj of (sec.objects || [])) {
+        if (obj.type === 'image' && obj.src && obj.src.startsWith('data:')) {
+          const ext  = (obj.src.match(/data:image\/([a-z+]+)/) || [])[1] || 'png';
+          const name = await window.editorAPI.importAssetData(obj.src, ext);
+          obj.src = 'asset://' + name;
+          setStatus(`Migrating images… ${++done}/${total}`);
+        }
+      }
+    }
+  }
+
+  initSections(secs);
+  dirty = total > 0; // mark dirty so the user knows to save the migrated project
   updateTitle();
-  setStatus('Opened.');
+  setStatus(total > 0 ? `Migrated ${total} images — press Ctrl+S to save the smaller project` : 'Opened.');
 }
 
 function initSections(defs) {
@@ -990,9 +1035,12 @@ ${sectionsHTML}
   for (const img of images) {
     if (!uniqueImgs.find(u => u.name === img.name)) uniqueImgs.push(img);
   }
+  const assetRefs = uniqueImgs.filter(i =>  i.assetRef).map(i => i.assetRef);
+  const dataImgs  = uniqueImgs.filter(i => !i.assetRef && i.dataUrl);
 
   await window.editorAPI.writeFile(destPath, html);
-  if (uniqueImgs.length) await window.editorAPI.copyImages(dir + '/images', uniqueImgs);
+  if (dataImgs.length)  await window.editorAPI.copyImages(dir + '/images', dataImgs);
+  if (assetRefs.length) await window.editorAPI.copyAssetsToDir(assetRefs, dir + '/images');
   setStatus('Exported to ' + destPath);
 }
 
@@ -1080,6 +1128,11 @@ function safeColor(color, fallback) {
 
 function collectImage(src, seenNames, images) {
   if (!src) return '';
+  if (src.startsWith('asset://')) {
+    const name = src.slice(8); // strip 'asset://'
+    if (!seenNames.has(name)) { seenNames.add(name); images.push({ name, assetRef: name }); }
+    return name;
+  }
   if (src.startsWith('data:')) {
     let hash = 0;
     for (let i = 0; i < Math.min(src.length, 300); i++) hash = ((hash << 5) - hash + src.charCodeAt(i)) | 0;
@@ -1098,18 +1151,43 @@ function escHtml(s) {
 }
 
 /* ── Preview ────────────────────────────────────────────────────────────── */
+
+// Populated before preview HTML is generated; maps 'asset://name' → data URL.
+// Allows objectToHTMLInline to inline asset images without async calls.
+let _assetCache = {};
+function resolveImgUrl(src) {
+  if (!src) return '';
+  if (src.startsWith('asset://')) return _assetCache[src] || '';
+  return src;
+}
+
 async function previewHTML() {
   saveCurrentSectionObjects();
   setStatus('Generating preview…');
 
-  const images    = [];
-  const seenNames = new Set();
+  // Load all referenced asset images as data URLs so the preview file is self-contained.
+  const assetNames = new Set();
+  sections.forEach(sec => {
+    if (sec.bgImage?.startsWith('asset://')) assetNames.add(sec.bgImage.slice(8));
+    (sec.objects || []).forEach(o => {
+      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(o.src.slice(8));
+    });
+  });
+  _assetCache = {};
+  for (const name of assetNames) {
+    const dataUrl = await window.editorAPI.readAsset(name);
+    if (dataUrl) _assetCache['asset://' + name] = dataUrl;
+  }
+
   const usedFonts = new Set();
 
   // Inline images as data-URIs so the temp file is self-contained
   const sectionsHTML = sections.map(sec => {
     let bgStyle = sectionBgCSS(sec);
-    if (sec.bgImage) bgStyle = `background:url('${sec.bgImage}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
+    if (sec.bgImage) {
+      const bg = resolveImgUrl(sec.bgImage) || sec.bgImage;
+      bgStyle = `background:url('${bg}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
+    }
     const objsHtml = (sec.objects || []).map(o => objectToHTMLInline(o, sec, usedFonts)).join('\n');
     return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;margin:0 auto;">\n${objsHtml}\n  </section>`;
   }).join('\n\n');
@@ -1169,13 +1247,11 @@ function objectToHTMLInline(o, sec, usedFonts) {
   }
 
   if (o.type === 'image') {
-    const src    = o.src || '';
+    const src    = resolveImgUrl(o.src); // asset:// → data URL; blob:// → ''
     const w      = Math.round((o.width  || 100) * (o.scaleX || 1));
     const h      = Math.round((o.height || 100) * (o.scaleY || 1));
     const border = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
-    // blob: URLs are Electron-local; they cannot load in a standalone browser.
-    // With the cutout fix they should never appear here, but guard just in case.
-    if (!src || src.startsWith('blob:')) return '';
+    if (!src) return '';
     return `    <img src="${src}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
       `width:${w}px;height:${h}px;${border}${angle}${opacity}">`;
   }
@@ -1375,7 +1451,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const raw = await window.editorAPI.readFile(settings.lastProjectPath);
       if (raw) {
         projectPath = settings.lastProjectPath;
-        loadData(JSON.parse(raw));
+        await window.editorAPI.setAssetDir(projectPath);
+        await loadData(JSON.parse(raw));
         setStatus('Resumed: ' + projectPath.split(/[/\\]/).pop());
         resumed = true;
       }
@@ -1386,7 +1463,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const rec = await window.editorAPI.readRecovery();
       if (rec) {
-        loadData(JSON.parse(rec));
+        await loadData(JSON.parse(rec));
         dirty = true;
         updateTitle();
         setStatus('Recovered unsaved work — press Ctrl+S to save.');

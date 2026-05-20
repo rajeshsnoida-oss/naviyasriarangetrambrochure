@@ -3,16 +3,42 @@ const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
 
+// Raise the renderer V8 heap limit so large projects can load during migration.
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+
 const VENDOR_ROOT = path.join(__dirname, '..', 'editor', 'vendor');
 
+// ── Asset directory tracking ──────────────────────────────────────────────────
+// null  = no project saved yet → use temp-assets in userData
+// path  = <project-dir>/<name>-assets/
+let projectAssetsDir = null;
+
+function getTempAssetsDir() {
+  return path.join(app.getPath('userData'), 'temp-assets');
+}
+function getAssetsDir() {
+  if (projectAssetsDir) return projectAssetsDir;
+  const tmp = getTempAssetsDir();
+  if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
+  return tmp;
+}
+function assetsPathFor(projectFilePath) {
+  return path.join(
+    path.dirname(projectFilePath),
+    path.basename(projectFilePath, '.brochure') + '-assets'
+  );
+}
+
+// ── Custom schemes ────────────────────────────────────────────────────────────
 protocol.registerSchemesAsPrivileged([
   { scheme: 'vendor', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true, stream: true } },
+  { scheme: 'asset',  privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true } },
 ]);
 
 let mainWindow;
 
-const SETTINGS_FILE  = path.join(app.getPath('userData'), 'editor-settings.json');
-const RECOVERY_FILE  = path.join(app.getPath('userData'), 'recovery.brochure');
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'editor-settings.json');
+const RECOVERY_FILE = path.join(app.getPath('userData'), 'recovery.brochure');
 function readSettings() {
   try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch { return {}; }
 }
@@ -57,8 +83,6 @@ function registerVendorProtocol() {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
     try {
       const url  = new URL(request.url);
-      // vendor://background-removal/dist/index.mjs
-      //   host = 'background-removal', pathname = '/dist/index.mjs'
       const rel  = url.hostname + url.pathname;
       const file = path.join(VENDOR_ROOT, rel);
       if (!fs.existsSync(file)) return new Response('Not found: ' + rel, { status: 404 });
@@ -67,6 +91,30 @@ function registerVendorProtocol() {
       return new Response(data, { headers: { ...corsHeaders, 'Content-Type': MIME[ext] || 'application/octet-stream' } });
     } catch (e) {
       return new Response(e.message, { status: 500, headers: corsHeaders });
+    }
+  });
+}
+
+// ── asset:// protocol — serves image assets from the project assets folder ────
+function registerAssetProtocol() {
+  const MIME = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+  };
+  const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD' };
+  protocol.handle('asset', (request) => {
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+    try {
+      const url  = new URL(request.url);
+      // asset://img_abc123.jpg → hostname = "img_abc123.jpg"
+      const name = decodeURIComponent(url.hostname);
+      const file = path.join(getAssetsDir(), name);
+      if (!fs.existsSync(file)) return new Response('Not found: ' + name, { status: 404, headers: CORS });
+      const data = fs.readFileSync(file);
+      const mime = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+      return new Response(data, { headers: { ...CORS, 'Content-Type': mime, 'Cache-Control': 'max-age=3600' } });
+    } catch (e) {
+      return new Response(e.message, { status: 500, headers: CORS });
     }
   });
 }
@@ -134,17 +182,14 @@ ipcMain.handle('fs:writeFile', async (_e, filePath, data) => {
   return true;
 });
 
+// Return source paths only — no base64. The renderer calls asset:import to copy.
 ipcMain.handle('dialog:openImages', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'] }],
     properties: ['openFile', 'multiSelections'],
   });
   if (canceled) return [];
-  return filePaths.map(p => ({
-    name: path.basename(p),
-    dataUrl: 'data:image/' + path.extname(p).slice(1).toLowerCase().replace('jpg','jpeg') + ';base64,' +
-             fs.readFileSync(p).toString('base64'),
-  }));
+  return filePaths.map(p => ({ name: path.basename(p), srcPath: p }));
 });
 
 ipcMain.handle('dialog:exportDir', async () => {
@@ -161,6 +206,7 @@ ipcMain.handle('fs:readFile', async (_e, filePath) => {
   return fs.readFileSync(filePath, 'utf8');
 });
 
+// Copy data-URL images to an export directory (for embedded images in old projects)
 ipcMain.handle('dialog:copyImages', async (_e, destDir, images) => {
   if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
   for (const img of images) {
@@ -170,11 +216,87 @@ ipcMain.handle('dialog:copyImages', async (_e, destDir, images) => {
   return true;
 });
 
+// ── Asset IPC ─────────────────────────────────────────────────────────────────
+
+// Copy an image file from anywhere on disk into the active assets folder.
+ipcMain.handle('asset:import', async (_e, srcPath) => {
+  const dir = getAssetsDir();
+  const ext = path.extname(srcPath).toLowerCase().replace('.jpeg', '.jpg');
+  const name = 'img_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7) + ext;
+  fs.copyFileSync(srcPath, path.join(dir, name));
+  return name;
+});
+
+// Write a data URL as a file in the active assets folder (for cutout results, migration).
+ipcMain.handle('asset:importDataUrl', async (_e, dataUrl, ext) => {
+  const dir = getAssetsDir();
+  const extMap = { jpeg: 'jpg', jpg: 'jpg', png: 'png', gif: 'gif', webp: 'webp', svg: 'svg', 'svg+xml': 'svg' };
+  const safeExt = extMap[(ext || 'png').replace(/[^a-z0-9+]/g, '')] || 'png';
+  const name = 'img_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7) + '.' + safeExt;
+  const b64 = dataUrl.split(',')[1] || '';
+  fs.writeFileSync(path.join(dir, name), Buffer.from(b64, 'base64'));
+  return name;
+});
+
+// Read an asset as a data URL (used for preview HTML generation).
+ipcMain.handle('asset:readDataUrl', async (_e, name) => {
+  const file = path.join(getAssetsDir(), name);
+  if (!fs.existsSync(file)) return null;
+  const data = fs.readFileSync(file);
+  const ext  = path.extname(file).toLowerCase();
+  const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml' }[ext] || 'image/png';
+  return `data:${mime};base64,${data.toString('base64')}`;
+});
+
+// Copy named assets to an export directory (avoids base64 round-trip during export).
+ipcMain.handle('asset:copyToDir', async (_e, names, destDir) => {
+  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+  const src = getAssetsDir();
+  for (const name of names) {
+    const srcFile = path.join(src, name);
+    if (fs.existsSync(srcFile)) fs.copyFileSync(srcFile, path.join(destDir, name));
+  }
+  return true;
+});
+
+// Set the active project path and migrate assets from temp dir if needed.
+ipcMain.handle('asset:setDir', async (_e, projectFilePath) => {
+  const newDir = assetsPathFor(projectFilePath);
+  if (projectAssetsDir === newDir) return newDir;
+  if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true });
+
+  const tempDir = getTempAssetsDir();
+  if (!projectAssetsDir && fs.existsSync(tempDir)) {
+    // First save: migrate temp assets into the project assets dir.
+    for (const f of fs.readdirSync(tempDir)) {
+      const dest = path.join(newDir, f);
+      if (!fs.existsSync(dest)) fs.copyFileSync(path.join(tempDir, f), dest);
+    }
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+  } else if (projectAssetsDir && fs.existsSync(projectAssetsDir) && projectAssetsDir !== newDir) {
+    // Save-As: copy assets to new location.
+    for (const f of fs.readdirSync(projectAssetsDir)) {
+      const dest = path.join(newDir, f);
+      if (!fs.existsSync(dest)) fs.copyFileSync(path.join(projectAssetsDir, f), dest);
+    }
+  }
+  projectAssetsDir = newDir;
+  return newDir;
+});
+
+// Reset to temp dir (new project).
+ipcMain.handle('asset:clearDir', async () => {
+  projectAssetsDir = null;
+  const tempDir = getTempAssetsDir();
+  try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+  return true;
+});
+
 ipcMain.handle('settings:get',      () => readSettings());
 ipcMain.handle('settings:set',      (_e, obj) => { writeSettings(obj); return true; });
 ipcMain.handle('recovery:write',    (_e, data) => { try { fs.writeFileSync(RECOVERY_FILE, data, 'utf8'); } catch {} return true; });
 ipcMain.handle('recovery:read',     () => { try { return fs.readFileSync(RECOVERY_FILE, 'utf8'); } catch { return null; } });
-ipcMain.handle('recovery:clear',    () => { try { if (fs.existsSync(RECOVERY_FILE)) fs.unlinkSync(RECOVERY_FILE); } catch {} return true; });;
+ipcMain.handle('recovery:clear',    () => { try { if (fs.existsSync(RECOVERY_FILE)) fs.unlinkSync(RECOVERY_FILE); } catch {} return true; });
 
 ipcMain.handle('clipboard:readText',  () => clipboard.readText());
 
@@ -185,11 +307,12 @@ ipcMain.handle('preview:open', async (_e, html) => {
   return true;
 });
 
-function openProject()  { mainWindow.webContents.send('menu:open'); }
+function openProject()   { mainWindow.webContents.send('menu:open'); }
 function saveProjectAs() { mainWindow.webContents.send('menu:save-as'); }
 
 app.whenReady().then(() => {
   registerVendorProtocol();
+  registerAssetProtocol();
   createWindow();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
