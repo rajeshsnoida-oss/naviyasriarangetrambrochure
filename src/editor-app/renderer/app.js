@@ -862,17 +862,17 @@ function redo() {
 function setZoom(z) {
   zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
   canvas.setZoom(zoom);
-  canvas.setWidth(CANVAS_W  * zoom);
-  canvas.setHeight((sections[activeSec]?.height || 600) * zoom);
+  // Integer pixel dimensions prevent sub-pixel blurriness
+  canvas.setWidth(Math.round(CANVAS_W * zoom));
+  canvas.setHeight(Math.round((sections[activeSec]?.height || 600) * zoom));
   document.getElementById('zoom-label').textContent = Math.round(zoom * 100) + '%';
 }
 
 function zoomFit() {
   const host = document.getElementById('canvas-host');
-  const z = Math.min(
-    (host.clientWidth  - 48) / CANVAS_W,
-    (host.clientHeight - 48) / (sections[activeSec]?.height || 600)
-  );
+  // Fit to width only — canvas-host has overflow:auto so sections scroll vertically.
+  // Fitting height would shrink tall sections to unreadable zoom levels.
+  const z = (host.clientWidth - 48) / CANVAS_W;
   setZoom(z);
 }
 
@@ -1017,17 +1017,32 @@ ${fontsLink}
   <link rel="stylesheet" href="css/style.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #111; }
+    body { background: #111; overflow-x: hidden; }
+    #brochure-wrap { width: 100%; overflow: hidden; }
+    #brochure-inner { transform-origin: top left; }
     .bs { box-sizing: border-box; }
-    @media (max-width: ${CANVAS_W}px) {
-      .bs { width: 100% !important; height: auto !important; min-height: 200px; }
-      .bs > * { position: static !important; width: auto !important; left: auto !important;
-                top: auto !important; transform: none !important; display: block; }
-    }
   </style>
 </head>
 <body>
+<div id="brochure-wrap"><div id="brochure-inner">
 ${sectionsHTML}
+</div></div>
+<script>
+(function(){
+  var W=${CANVAS_W};
+  function fit(){
+    var vw=window.innerWidth;
+    if(vw>=W)return;
+    var s=vw/W;
+    var inner=document.getElementById('brochure-inner');
+    inner.style.transform='scale('+s+')';
+    inner.style.transformOrigin='top left';
+    document.getElementById('brochure-wrap').style.height=Math.round(inner.scrollHeight*s)+'px';
+  }
+  fit();
+  window.addEventListener('resize',fit);
+})();
+</script>
 </body>
 </html>`;
 
@@ -1189,8 +1204,13 @@ async function previewHTML() {
       bgStyle = `background:url('${bg}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
     }
     const objsHtml = (sec.objects || []).map(o => objectToHTMLInline(o, sec, usedFonts)).join('\n');
-    return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;margin:0 auto;">\n${objsHtml}\n  </section>`;
+    return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;">\n${objsHtml}\n  </section>`;
   }).join('\n\n');
+
+  const totalHeight = sections.reduce((s, sec) => s + (sec.height || 600), 0);
+  const PHONE_W = 390;
+  const scale = PHONE_W / CANVAS_W;
+  const scaledH = Math.round(totalHeight * scale);
 
   const googleFontsUrl = buildGoogleFontsUrl(usedFonts);
   const fontsLink = googleFontsUrl
@@ -1207,11 +1227,27 @@ async function previewHTML() {
 ${fontsLink}
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#111}
+body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;padding:40px 16px;font-family:sans-serif}
+.preview-label{color:#777;font-size:11px;margin-bottom:14px;letter-spacing:0.08em;text-transform:uppercase}
+.phone-frame{width:406px;border-radius:48px;border:8px solid #444;background:#000;box-shadow:0 0 0 1px #555,0 32px 80px rgba(0,0,0,0.7);overflow:hidden;position:relative}
+.phone-notch{width:120px;height:30px;background:#000;border-radius:0 0 20px 20px;position:absolute;top:0;left:50%;transform:translateX(-50%);z-index:10}
+.phone-screen{overflow:hidden;position:relative;height:${scaledH}px}
+.phone-content{transform-origin:top left;transform:scale(${scale.toFixed(4)});width:${CANVAS_W}px;position:absolute;top:0;left:0}
 .bs{position:relative;overflow:hidden}
 </style>
 </head>
-<body>${sectionsHTML}</body></html>`;
+<body>
+<div class="preview-label">Mobile Preview — 390px</div>
+<div class="phone-frame">
+  <div class="phone-notch"></div>
+  <div class="phone-screen">
+    <div class="phone-content">
+${sectionsHTML}
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
 
   await window.editorAPI.previewOpen(html);
   setStatus('Preview opened in browser.');
