@@ -157,6 +157,12 @@ function buildFontPicker() {
 }
 
 /* ── Fabric canvas init ─────────────────────────────────────────────────── */
+// Disable per-object bitmap caches. Without this, Fabric builds each object's
+// texture at its natural size and stretches it at non-1× zoom, causing blurry
+// text. Disabling caching makes Fabric redraw every object directly each frame —
+// fine for a brochure with ≤50 objects.
+fabric.Object.prototype.objectCaching = false;
+
 function initCanvas() {
   canvas = new fabric.Canvas('c', {
     width:  CANVAS_W,
@@ -287,7 +293,7 @@ function switchSection(idx) {
   activeSec = idx;
   const sec = sections[idx];
 
-  canvas.setHeight(sec.height * zoom);
+  canvas.setHeight(Math.round(sec.height * zoom));
 
   // loadFromJSON clears backgroundColor — applyCanvasBg must run AFTER it completes.
   const afterLoad = () => {
@@ -368,7 +374,7 @@ function bindSectionProps() {
     if (activeSec < 0) return;
     const h = Math.max(200, Math.min(4000, parseInt(e.target.value, 10) || 700));
     sections[activeSec].height = h;
-    canvas.setHeight(h * zoom);
+    canvas.setHeight(Math.round(h * zoom));
     canvas.renderAll();
     markDirty();
   });
