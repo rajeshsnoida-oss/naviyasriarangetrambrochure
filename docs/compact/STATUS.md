@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-17
+**Last updated**: 2026-05-20
 **Last drift-check**: 2026-05-12 — mode: design — 0 resolved, 2 skipped
 
 ## Done
@@ -29,6 +29,7 @@
 - 2026-05-16 Editor: export HTML fixed — objectToHTML used undefined `angle` for images/shapes (rotateCss was defined but not used); switchSection canvas height corrected to account for zoom
 - 2026-05-16 Editor: justify text alignment added (Fabric justify-left; CSS text-align:justify)
 - 2026-05-17 Editor: HTML preview/export position fixes — origin-aware fabricLeft/Top helpers; transform-origin:top left for rotated images/shapes; removed object-fit:contain from image render (was causing border/divider images to appear visually misplaced); D-027–D-029 logged
+- 2026-05-20 Editor: font preloading fix — await document.fonts.load() for all web fonts used in project before Fabric initSections(); replaced unreliable document.fonts.ready with explicit per-font loads + initDimensions() in switchSection afterLoad; fixes words concatenated without spaces in Textbox (wrong fallback font metrics at measureText time)
 
 ## In progress
 

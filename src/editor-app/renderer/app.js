@@ -309,12 +309,25 @@ function switchSection(idx) {
         });
       }, { crossOrigin: 'anonymous' });
     }
-    // Re-render once web fonts finish downloading so text layout uses correct
-    // metrics (Fabric renders with the fallback font on the first frame if the
-    // web font hasn't arrived yet, producing wrong line-breaks and blurry glyphs).
-    document.fonts.ready.then(() => {
+    // Re-render once the section's web fonts are confirmed loaded.
+    // document.fonts.ready is unreliable for lazily-loaded @font-face — it resolves
+    // immediately if nothing is actively downloading. Use explicit per-font loads.
+    const sectionFonts = new Set();
+    canvas.getObjects().forEach(obj => {
+      if ((obj.type === 'textbox' || obj.type === 'i-text') && obj.fontFamily && GOOGLE_FONTS.has(obj.fontFamily)) {
+        sectionFonts.add(obj.fontFamily);
+      }
+    });
+    const fontLoads = [];
+    sectionFonts.forEach(ff => {
+      ['400', '700', 'italic 400'].forEach(v => fontLoads.push(document.fonts.load(`${v} 16px "${ff}"`).catch(() => {})));
+    });
+    Promise.all(fontLoads).then(() => {
       canvas.getObjects().forEach(obj => {
-        if (obj.type === 'textbox' || obj.type === 'i-text') obj._forceClearCache = true;
+        if (obj.type === 'textbox' || obj.type === 'i-text') {
+          obj.dirty = true;
+          obj.initDimensions();
+        }
       });
       canvas.requestRenderAll();
     });
@@ -967,6 +980,26 @@ async function loadData(data) {
         }
       }
     }
+  }
+
+  // Preload every web font used in this project before handing data to Fabric.
+  // Fabric's Textbox._splitTextIntoLines() calls ctx.measureText() at construction
+  // time. If the web font hasn't loaded yet it uses the fallback font's (narrower)
+  // metrics, calculates wrong line-break positions, and renders words concatenated.
+  const usedFonts = new Set();
+  for (const sec of secs) {
+    for (const obj of (sec.objects || [])) {
+      if (obj.fontFamily && GOOGLE_FONTS.has(obj.fontFamily)) usedFonts.add(obj.fontFamily);
+    }
+  }
+  if (usedFonts.size) {
+    setStatus('Loading fonts…');
+    await Promise.all([...usedFonts].map(ff =>
+      Promise.all(['400', '700', '400italic'].map(variant => {
+        const [wt, style] = variant === '400italic' ? ['400', 'italic'] : [variant, 'normal'];
+        return document.fonts.load(`${style === 'italic' ? 'italic ' : ''}${wt} 16px "${ff}"`).catch(() => {});
+      }))
+    ));
   }
 
   initSections(secs);

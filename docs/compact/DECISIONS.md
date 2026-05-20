@@ -1,5 +1,27 @@
 # Decisions
 
+## D-031 — `obj.initDimensions()` to force line-break recalculation after lazy font load
+**Status**: Active
+**Date**: 2026-05-20
+**Context**: When switching sections, `loadFromJSON` constructs Fabric objects synchronously. By the time the section's fonts finish loading (async), the canvas has already rendered with wrong line breaks using fallback font metrics.
+**Decision**: After per-section `document.fonts.load()` Promises resolve in `afterLoad`, call `obj.initDimensions()` on every textbox before requesting re-render.
+**Why**: Setting `obj.dirty = true` alone triggers a redraw of the existing cached layout — it does not re-run `_splitTextIntoLines()`. `initDimensions()` is Fabric's internal method that re-measures text and recalculates line-break positions using current `ctx.measureText()` results.
+**Consequences**: `initDimensions()` is a Fabric internal (not in the public API) — could change in future Fabric versions. Acceptable: project is pinned to Fabric v5.3.
+**Alternatives considered**:
+  - `obj.dirty = true` + `requestRenderAll` — rejected; redraws stale layout without recalc.
+  - `FontFaceSet onloadingdone` event — rejected; requires cross-section state tracking.
+
+## D-030 — `document.fonts.load()` over `document.fonts.ready` for web-font preloading
+**Status**: Active
+**Date**: 2026-05-20
+**Context**: Fabric.js `Textbox._splitTextIntoLines()` calls `ctx.measureText()` at construction time. If the web font hasn't downloaded yet it falls back to the system font's narrower metrics, calculates wrong line-break positions, then renders the actual wider font without recalculating — words appear concatenated without spaces (confirmed via screenshot of Dance Items section).
+**Decision**: Use `document.fonts.load('400 16px "FontName"')` (and 700, italic 400 variants) to explicitly trigger and await each web font's download before calling `initSections()` in `loadData()`.
+**Why**: `document.fonts.ready` resolves immediately if no fonts are actively downloading — Google Fonts are lazily loaded via `@font-face` and may not have started yet when `ready` fires. `document.fonts.load()` actually triggers the download and returns a Promise that resolves only when that specific variant is available.
+**Consequences**: `loadData()` must remain `async`. Status bar shows "Loading fonts…" briefly on project open. Fonts that fail to load are silently swallowed (`.catch(()=>{})`) — text layout may degrade on offline use but this is acceptable.
+**Alternatives considered**:
+  - `document.fonts.ready` — rejected; resolves immediately for lazily-loaded fonts.
+  - `setTimeout` delay — rejected; arbitrary and brittle.
+
 ## D-029 — Standardize `transform-origin:top left` for all rotated objects in HTML
 
 **Status**: Active
