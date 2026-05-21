@@ -1224,14 +1224,14 @@ async function exportHTML() {
   if (!destPath) return;
 
   setStatus('Bundling assets…');
-
+  try {
   // Pre-load every asset:// image as a data URL so the exported HTML is fully
   // self-contained — no separate images/ folder required.
   const assetNames = new Set();
   sections.forEach(sec => {
-    if (sec.bgImage?.startsWith('asset://')) assetNames.add(sec.bgImage.slice(8));
+    if (sec.bgImage?.startsWith('asset://')) assetNames.add(assetName(sec.bgImage));
     (sec.objects || []).forEach(o => {
-      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(o.src.slice(8));
+      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(assetName(o.src));
     });
   });
   _assetCache = {};
@@ -1299,6 +1299,9 @@ ${sectionsHTML}
 
   await window.editorAPI.writeFile(destPath, html);
   setStatus('Exported to ' + destPath);
+  } catch (e) {
+    setStatus('Export failed: ' + (e && e.message ? e.message : String(e)));
+  }
 }
 
 /* Fabric stores left/top at the object's originX/originY point.
@@ -1412,9 +1415,15 @@ function escHtml(s) {
 // Populated before preview HTML is generated; maps 'asset://name' → data URL.
 // Allows objectToHTMLInline to inline asset images without async calls.
 let _assetCache = {};
+function assetName(src) {
+  // Chromium normalises asset://img.png → asset://img.png/ (adds trailing slash for empty path).
+  // Use URL.hostname to reliably strip the scheme + any trailing slash.
+  try { return new URL(src).hostname; } catch { return src.slice(8); }
+}
+
 function resolveImgUrl(src) {
   if (!src) return '';
-  if (src.startsWith('asset://')) return _assetCache[src] || '';
+  if (src.startsWith('asset://')) return _assetCache['asset://' + assetName(src)] || '';
   return src;
 }
 
@@ -1422,13 +1431,13 @@ async function previewHTML() {
   clearTimeout(_recoveryTimer);
   snapshotCurrentSection();
   setStatus('Generating preview…');
-
+  try {
   // Load all referenced asset images as data URLs so the preview file is self-contained.
   const assetNames = new Set();
   sections.forEach(sec => {
-    if (sec.bgImage?.startsWith('asset://')) assetNames.add(sec.bgImage.slice(8));
+    if (sec.bgImage?.startsWith('asset://')) assetNames.add(assetName(sec.bgImage));
     (sec.objects || []).forEach(o => {
-      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(o.src.slice(8));
+      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(assetName(o.src));
     });
   });
   _assetCache = {};
@@ -1494,6 +1503,9 @@ ${sectionsHTML}
 
   await window.editorAPI.previewOpen(html);
   setStatus('Preview opened in browser.');
+  } catch (e) {
+    setStatus('Preview failed: ' + (e && e.message ? e.message : String(e)));
+  }
 }
 
 function objectToHTMLInline(o, sec, usedFonts) {
