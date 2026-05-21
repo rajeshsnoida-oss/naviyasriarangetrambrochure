@@ -81,8 +81,6 @@
     <label>Opacity <input type="range" id="prop-shape-opacity" min="0" max="100" value="100" style="width:80px"></label>
   </div>
 
-  <div class="tb-sep"></div>
-
   <div class="tb-group">
     <button class="tb-btn" id="btn-copy"  title="Copy (Ctrl+C)">Copy</button>
     <button class="tb-btn" id="btn-paste" title="Paste (Ctrl+V)">Paste</button>
@@ -109,6 +107,19 @@
     <span id="zoom-label">100%</span>
     <button class="tb-btn" id="btn-zoom-in"  title="Zoom in">+</button>
     <button class="tb-btn" id="btn-zoom-fit" title="Fit">Fit</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- context: multiple objects selected -->
+  <div class="tb-group ctx-multi" id="tb-align-props">
+    <span class="tb-align-label">Align:</span>
+    <button class="tb-btn" id="btn-align-left"    title="Align left edges">⬅ L</button>
+    <button class="tb-btn" id="btn-align-centerH" title="Center horizontally">↔ C</button>
+    <button class="tb-btn" id="btn-align-right"   title="Align right edges">R ➡</button>
+    <button class="tb-btn" id="btn-align-top"     title="Align top edges">⬆ T</button>
+    <button class="tb-btn" id="btn-align-centerV" title="Center vertically">↕ M</button>
+    <button class="tb-btn" id="btn-align-bottom"  title="Align bottom edges">B ⬇</button>
   </div>
 
   <div class="tb-sep"></div>
@@ -197,6 +208,10 @@
     <hr>
     <button class="tb-btn" id="btn-apply-bg-all" title="Copy this section's background to all other sections">Apply bg to all sections</button>
     <button class="tb-btn danger" id="btn-delete-section">Delete Section</button>
+    <hr>
+    <h3>Text Styles</h3>
+    <div id="text-style-list"></div>
+    <button class="tb-btn" id="btn-capture-style" title="Capture selected text object's style as a new preset">+ Capture</button>
   </aside>
 
 </div>

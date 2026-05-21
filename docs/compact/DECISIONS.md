@@ -1,5 +1,29 @@
 # Decisions
 
+## D-033 — Self-contained HTML export via pre-loaded data URLs
+
+**Status**: Active
+**Date**: 2026-05-21
+**Context**: The previous export wrote asset images to a sibling `images/` folder alongside the exported HTML, requiring the two to be kept together. This made sharing or emailing the brochure fragile — the images folder had to travel with the file.
+**Decision**: Before rendering sections, `exportHTML` reads every `asset://` reference via `editorAPI.readAsset()` into an `_assetCache` map, then `resolveImgUrl()` replaces `asset://` URLs with data URLs inline. The HTML file is fully self-contained; no `images/` folder is created.
+**Why**: A single `.html` file is simpler to share and guaranteed to be consistent. Data URLs work in any browser with no server; the overhead (~33% base64 expansion) is acceptable for a brochure with a handful of photos. Removes the `copyImages`/`copyAssetsToDir` IPC calls and the `css/style.css` dependency from the export.
+**Consequences**: Exported HTML file size increases proportionally to embedded image sizes. Very large photo-heavy brochures (~10+ MB images) may produce a large HTML file, but event brochures are unlikely to hit this limit. `_assetCache` is module-level and overwritten on each export — not thread-safe, but Electron renderer is single-threaded.
+**Alternatives considered**:
+  - Keep `images/` folder — rejected; fragile sharing, two files to manage.
+  - ZIP output — rejected; adds complexity; browsers can't open ZIPs directly.
+
+## D-032 — `snapshotCurrentSection()` to avoid group-relative coord corruption
+
+**Status**: Active
+**Date**: 2026-05-21
+**Context**: When a multi-select (`activeSelection`) is live on the canvas, Fabric stores member object coords relative to the group's center, not the canvas origin. Calling `canvas.toJSON()` in this state serialises group-relative values into `sections[activeSec].objects`. On reload, the objects are positioned as if the group never existed — they appear at wrong coordinates, sometimes far off-screen.
+**Decision**: Introduce `snapshotCurrentSection()` which calls `canvas.discardActiveObject()` before `canvas.toJSON()`, then restores any re-render. All explicit serialisation paths (save, export, preview, section-switch, section-reorder) use this function. The background auto-recovery timer still uses `saveCurrentSectionObjects()` (no discard) but skips the call entirely when an `activeSelection` is live, accepting slightly stale recovery data over corrupted coords.
+**Why**: `discardActiveObject()` triggers Fabric's `_restoreObjectsState` which converts all group-relative coords back to canvas-absolute before the selection is dismissed. This is the only reliable way to get correct absolute coords without reimplementing Fabric's decompose math. Calling it in `onCanvasChange` was considered but rejected — repeated qrDecompose accumulates floating-point drift that visibly resizes objects over time.
+**Consequences**: Explicit save/export/preview briefly flashes a deselection (active handles disappear for one frame). Acceptable UX. Auto-recovery data may be up to one canvas-change stale when a multi-select is active — the risk window is small (2-second debounce).
+**Alternatives considered**:
+  - Always call in `onCanvasChange` — rejected; floating-point drift from repeated qrDecompose corrupts dimensions.
+  - Manually recompute absolute coords from group transform — rejected; reimplements Fabric internals.
+
 ## D-031 — `obj.initDimensions()` to force line-break recalculation after lazy font load
 **Status**: Active
 **Date**: 2026-05-20

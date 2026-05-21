@@ -1,6 +1,11 @@
 'use strict';
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const CANVAS_W   = 794;
+const CANVAS_JSON_PROPS = [
+  'name','fontFamily','fontWeight','fontStyle','underline','fill',
+  'textAlign','fontSize','textBackgroundColor','lineHeight','charSpacing',
+  'stroke','strokeWidth','opacity','angle','_shadowPreset','_shadowColor',
+];
 const ZOOM_STEP  = 0.1;
 const ZOOM_MIN   = 0.2;
 const ZOOM_MAX   = 3.0;
@@ -134,6 +139,16 @@ let removeBgFn  = null;
 let clipboard   = null;   // stores cloned Fabric objects for copy/paste
 let pasteOffset = 0;      // cumulative paste offset so repeated pastes don't stack exactly
 
+/* ── Text style presets ─────────────────────────────────────────────────── */
+const DEFAULT_TEXT_STYLES = [
+  { id: 'ts_1', name: 'Title',    fontFamily: 'Playfair Display',   fontSize: 48, fontWeight: 'bold',   fontStyle: 'normal', color: '#ffffff', textAlign: 'center' },
+  { id: 'ts_2', name: 'Subtitle', fontFamily: 'Cormorant Garamond', fontSize: 28, fontWeight: 'normal', fontStyle: 'italic', color: '#c9a84c', textAlign: 'center' },
+  { id: 'ts_3', name: 'Body',     fontFamily: 'Lora',               fontSize: 16, fontWeight: 'normal', fontStyle: 'normal', color: '#ffffff', textAlign: 'left'   },
+  { id: 'ts_4', name: 'Caption',  fontFamily: 'Lato',               fontSize: 13, fontWeight: 'normal', fontStyle: 'normal', color: '#cccccc', textAlign: 'left'   },
+  { id: 'ts_5', name: 'Heading',  fontFamily: 'Cinzel',             fontSize: 24, fontWeight: 'bold',   fontStyle: 'normal', color: '#c9a84c', textAlign: 'left'   },
+];
+let textStyles = DEFAULT_TEXT_STYLES.map(s => ({ ...s }));
+
 /* ── Font picker ────────────────────────────────────────────────────────── */
 function buildFontPicker() {
   const sel = document.getElementById('prop-font-family');
@@ -233,7 +248,7 @@ function renderSectionList() {
 }
 
 function moveSectionTo(from, to) {
-  saveCurrentSectionObjects();
+  snapshotCurrentSection();
   const [sec] = sections.splice(from, 1);
   const [h]   = history.splice(from, 1);
   const [hi]  = historyIdx.splice(from, 1);
@@ -254,6 +269,7 @@ function bgSettingsFrom(src) {
     bgType: src.bgType || 'solid', bg: src.bg || '#ffffff',
     bgGrad1: src.bgGrad1, bgGrad2: src.bgGrad2, bgGradDir: src.bgGradDir,
     bgTexture: src.bgTexture, bgTexFg: src.bgTexFg, bgTexBg: src.bgTexBg,
+    bgImage: src.bgImage || null, bgSize: src.bgSize || 'cover',
   };
 }
 
@@ -266,7 +282,19 @@ function propagateBgToAll(sourceSec) {
   sections.forEach((sec, i) => {
     if (sec === sourceSec) return;
     applyBgTo(sec, settings);
-    if (i === activeSec) applyCanvasBg(sec);
+    if (i === activeSec) {
+      applyCanvasBg(sec);
+      if (sec.bgImage) {
+        fabric.Image.fromURL(sec.bgImage, img => {
+          canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+            scaleX: CANVAS_W / img.width,
+            scaleY: sec.height / img.height,
+          });
+        }, { crossOrigin: 'anonymous' });
+      } else {
+        canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
+      }
+    }
   });
   markDirty();
 }
@@ -292,7 +320,7 @@ function applyCanvasBg(sec) {
 /* ── Switch active section ──────────────────────────────────────────────── */
 function switchSection(idx) {
   if (idx === activeSec) return;
-  saveCurrentSectionObjects();
+  snapshotCurrentSection();
   activeSec = idx;
   const sec = sections[idx];
 
@@ -359,11 +387,26 @@ function switchSection(idx) {
 
 function saveCurrentSectionObjects() {
   if (activeSec < 0 || activeSec >= sections.length) return;
-  sections[activeSec].objects = canvas.toJSON([
-    'name','fontFamily','fontWeight','fontStyle','underline','fill',
-    'textAlign','fontSize','textBackgroundColor','lineHeight','charSpacing',
-    'stroke','strokeWidth','opacity','angle','_shadowPreset','_shadowColor',
-  ]).objects;
+  sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
+}
+
+// Use for explicit snapshots only (save / preview / export / section switch).
+// Calls discardActiveObject() once so Fabric runs _restoreObjectsState() and
+// converts any group-relative coords back to absolute before serialising.
+// Do NOT call this from onCanvasChange — the repeated qrDecompose accumulates
+// floating-point drift that visibly resizes objects.
+function snapshotCurrentSection() {
+  if (activeSec < 0 || activeSec >= sections.length) return;
+  const active = canvas.getActiveObject();
+  if (active && active.type === 'activeSelection') {
+    const members = active.getObjects().slice();
+    canvas.discardActiveObject();
+    sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
+    canvas.setActiveObject(new fabric.ActiveSelection(members, { canvas }));
+    canvas.renderAll();
+  } else {
+    sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
+  }
 }
 
 /* ── Section props panel ────────────────────────────────────────────────── */
@@ -499,7 +542,7 @@ function bindSectionProps() {
 
 /* ── Add section ────────────────────────────────────────────────────────── */
 function addSection() {
-  saveCurrentSectionObjects();
+  snapshotCurrentSection();
   const label   = 'Section ' + (sections.length + 1);
   const coverBg = sections.length ? bgSettingsFrom(sections[0]) : {};
   sections.push({ label, height: 600, objects: [], ...coverBg });
@@ -525,6 +568,7 @@ function updateToolbar() {
   document.getElementById('tb-text-props').classList.toggle('active', isText);
   document.getElementById('tb-image-props').classList.toggle('active', isImage);
   document.getElementById('tb-shape-props').classList.toggle('active', isShape);
+  document.getElementById('tb-align-props').classList.toggle('active', objs.length >= 2);
 
   if (!obj) return;
 
@@ -686,6 +730,14 @@ function bindToolbar() {
   document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(zoom - ZOOM_STEP));
   document.getElementById('btn-zoom-fit').addEventListener('click', zoomFit);
 
+  // Alignment
+  ['left','centerH','right','top','centerV','bottom'].forEach(dir => {
+    document.getElementById('btn-align-' + dir).addEventListener('click', () => alignObjects(dir));
+  });
+
+  // Text style capture
+  document.getElementById('btn-capture-style').addEventListener('click', captureTextStyle);
+
   // File ops
   document.getElementById('btn-save').addEventListener('click',    () => saveProject(false));
   document.getElementById('btn-preview').addEventListener('click', previewHTML);
@@ -699,6 +751,122 @@ function applyText(prop, val) {
 function applyShape(prop, val) {
   const obj = canvas.getActiveObject(); if (!obj) return;
   obj.set(prop, val); canvas.renderAll();
+}
+
+/* ── Multi-select alignment ─────────────────────────────────────────────── */
+function alignObjects(dir) {
+  const active = canvas.getActiveObject();
+  if (!active || active.type !== 'activeSelection') return;
+
+  const objects = active.getObjects().slice();
+
+  // Discard selection so each object returns to independent canvas-space coordinates.
+  canvas.discardActiveObject();
+
+  // getBoundingRect(true, true): absolute=true (no viewport transform), calculate=true (fresh).
+  const rects = objects.map(o => ({ obj: o, br: o.getBoundingRect(true, true) }));
+
+  const minL = Math.min(...rects.map(r => r.br.left));
+  const maxR = Math.max(...rects.map(r => r.br.left + r.br.width));
+  const minT = Math.min(...rects.map(r => r.br.top));
+  const maxB = Math.max(...rects.map(r => r.br.top + r.br.height));
+  const cx   = (minL + maxR) / 2;
+  const cy   = (minT + maxB) / 2;
+
+  rects.forEach(({ obj, br }) => {
+    switch (dir) {
+      case 'left':    obj.set('left', obj.left + (minL - br.left)); break;
+      case 'centerH': obj.set('left', obj.left + (cx   - (br.left + br.width  / 2))); break;
+      case 'right':   obj.set('left', obj.left + (maxR - (br.left + br.width)));  break;
+      case 'top':     obj.set('top',  obj.top  + (minT - br.top)); break;
+      case 'centerV': obj.set('top',  obj.top  + (cy   - (br.top  + br.height / 2))); break;
+      case 'bottom':  obj.set('top',  obj.top  + (maxB - (br.top  + br.height)));  break;
+    }
+    obj.setCoords();
+  });
+
+  canvas.setActiveObject(new fabric.ActiveSelection(objects, { canvas }));
+  canvas.renderAll();
+  onCanvasChange();
+}
+
+/* ── Text style picker ──────────────────────────────────────────────────── */
+function renderTextStyles() {
+  const list = document.getElementById('text-style-list');
+  list.innerHTML = '';
+  textStyles.forEach(style => {
+    const chip = document.createElement('div');
+    chip.className = 'ts-chip';
+    chip.dataset.sid = style.id;
+    chip.title = `Apply: ${style.name}`;
+
+    const aa = document.createElement('span');
+    aa.className = 'ts-aa';
+    aa.textContent = 'Aa';
+    aa.style.cssText = `font-family:'${style.fontFamily}',serif;font-weight:${style.fontWeight};` +
+      `font-style:${style.fontStyle};color:${style.color};`;
+
+    const name = document.createElement('span');
+    name.className = 'ts-name';
+    name.textContent = style.name;
+
+    const del = document.createElement('button');
+    del.className = 'ts-del';
+    del.textContent = '✕';
+    del.title = 'Delete style';
+    del.addEventListener('click', e => {
+      e.stopPropagation();
+      textStyles = textStyles.filter(s => s.id !== style.id);
+      renderTextStyles();
+      markDirty();
+    });
+
+    chip.append(aa, name, del);
+    chip.addEventListener('click', () => applyTextStyle(style));
+    list.appendChild(chip);
+  });
+}
+
+function applyTextStyle(style) {
+  const obj = canvas.getActiveObject();
+  if (!obj || (obj.type !== 'textbox' && obj.type !== 'i-text')) {
+    setStatus('Select a text box first, then click a style to apply it.');
+    return;
+  }
+  obj.set({
+    fontFamily: style.fontFamily,
+    fontSize:   style.fontSize,
+    fontWeight: style.fontWeight,
+    fontStyle:  style.fontStyle,
+    fill:       style.color,
+    textAlign:  style.textAlign,
+  });
+  obj.initDimensions();
+  canvas.renderAll();
+  updateToolbar();
+  onCanvasChange();
+}
+
+function captureTextStyle() {
+  const obj = canvas.getActiveObject();
+  if (!obj || (obj.type !== 'textbox' && obj.type !== 'i-text')) {
+    setStatus('Select a text box to capture its style.');
+    return;
+  }
+  const name = prompt('Style name:', 'Custom ' + (textStyles.length + 1));
+  if (!name) return;
+  textStyles.push({
+    id:         'ts_' + Date.now(),
+    name,
+    fontFamily: obj.fontFamily || 'Playfair Display',
+    fontSize:   Math.round(obj.fontSize || 16),
+    fontWeight: obj.fontWeight || 'normal',
+    fontStyle:  obj.fontStyle  || 'normal',
+    color:      fabricColorToHex(obj.fill) || '#ffffff',
+    textAlign:  obj.textAlign  || 'left',
+  });
+  renderTextStyles();
+  markDirty();
 }
 
 /* ── Add objects ────────────────────────────────────────────────────────── */
@@ -847,8 +1015,15 @@ let _recoveryTimer = null;
 function scheduleRecovery() {
   clearTimeout(_recoveryTimer);
   _recoveryTimer = setTimeout(() => {
-    saveCurrentSectionObjects();
-    const snap = JSON.stringify({ version: 1, canvasW: CANVAS_W, sections });
+    // Skip saving if an active selection is live — canvas.toJSON() would return
+    // group-relative coords which would corrupt sections[activeSec].objects.
+    // onCanvasChange already called saveCurrentSectionObjects() synchronously,
+    // so sections data is as fresh as it can be without a discard/restore cycle.
+    const active = canvas.getActiveObject();
+    if (!active || active.type !== 'activeSelection') {
+      saveCurrentSectionObjects();
+    }
+    const snap = JSON.stringify({ version: 1, canvasW: CANVAS_W, sections, textStyles });
     if (snap.length > RECOVERY_MAX_BYTES) {
       setStatus('Project is large — auto-recovery skipped. Save manually (Ctrl+S).');
       return;
@@ -915,14 +1090,15 @@ function zoomFit() {
 
 /* ── Save / Load ────────────────────────────────────────────────────────── */
 async function saveProject(saveAs) {
-  saveCurrentSectionObjects();
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
   if (saveAs || !projectPath) {
     const p = await window.editorAPI.saveProject(projectPath);
     if (!p) return;
     projectPath = p;
     await window.editorAPI.setAssetDir(projectPath); // migrate temp assets → project assets folder
   }
-  await window.editorAPI.writeFile(projectPath, JSON.stringify({ version: 1, canvasW: CANVAS_W, sections }, null, 2));
+  await window.editorAPI.writeFile(projectPath, JSON.stringify({ version: 1, canvasW: CANVAS_W, sections, textStyles }, null, 2));
   await window.editorAPI.setSettings({ lastProjectPath: projectPath });
   window.editorAPI.clearRecovery().catch(() => {});
   dirty = false;
@@ -945,6 +1121,8 @@ async function newProject() {
   if (dirty && !confirm('Unsaved changes — start new project?')) return;
   projectPath = null;
   await window.editorAPI.clearAssetDir();
+  textStyles = DEFAULT_TEXT_STYLES.map(s => ({ ...s }));
+  renderTextStyles();
   initSections(DEFAULT_SECTIONS);
   dirty = false;
   updateTitle();
@@ -1002,6 +1180,8 @@ async function loadData(data) {
     ));
   }
 
+  textStyles = data.textStyles ? data.textStyles : DEFAULT_TEXT_STYLES.map(s => ({ ...s }));
+  renderTextStyles();
   initSections(secs);
   dirty = total > 0; // mark dirty so the user knows to save the migrated project
   updateTitle();
@@ -1038,22 +1218,37 @@ function buildGoogleFontsUrl(usedFonts) {
 
 /* ── Export to HTML ─────────────────────────────────────────────────────── */
 async function exportHTML() {
-  saveCurrentSectionObjects();
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
   const destPath = await window.editorAPI.exportDir();
   if (!destPath) return;
-  const dir = destPath.replace(/[/\\][^/\\]*$/, '');
 
-  const images     = [];
-  const seenNames  = new Set();
-  const usedFonts  = new Set();
+  setStatus('Bundling assets…');
+
+  // Pre-load every asset:// image as a data URL so the exported HTML is fully
+  // self-contained — no separate images/ folder required.
+  const assetNames = new Set();
+  sections.forEach(sec => {
+    if (sec.bgImage?.startsWith('asset://')) assetNames.add(sec.bgImage.slice(8));
+    (sec.objects || []).forEach(o => {
+      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(o.src.slice(8));
+    });
+  });
+  _assetCache = {};
+  for (const name of assetNames) {
+    const dataUrl = await window.editorAPI.readAsset(name);
+    if (dataUrl) _assetCache['asset://' + name] = dataUrl;
+  }
+
+  const usedFonts = new Set();
 
   const sectionsHTML = sections.map(sec => {
     let bgStyle = sectionBgCSS(sec);
     if (sec.bgImage) {
-      const imgName = collectImage(sec.bgImage, seenNames, images);
-      bgStyle = `background:url('images/${imgName}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
+      const bg = resolveImgUrl(sec.bgImage) || sec.bgImage;
+      bgStyle = `background:url('${bg}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
     }
-    const objsHtml = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames)).join('\n');
+    const objsHtml = (sec.objects || []).map(o => objectToHTMLInline(o, sec, usedFonts)).join('\n');
     return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;margin:0 auto;">\n${objsHtml}\n  </section>`;
   }).join('\n\n');
 
@@ -1071,7 +1266,6 @@ async function exportHTML() {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Arangetram Brochure</title>
 ${fontsLink}
-  <link rel="stylesheet" href="css/style.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #111; overflow-x: hidden; }
@@ -1103,16 +1297,7 @@ ${sectionsHTML}
 </body>
 </html>`;
 
-  const uniqueImgs = [];
-  for (const img of images) {
-    if (!uniqueImgs.find(u => u.name === img.name)) uniqueImgs.push(img);
-  }
-  const assetRefs = uniqueImgs.filter(i =>  i.assetRef).map(i => i.assetRef);
-  const dataImgs  = uniqueImgs.filter(i => !i.assetRef && i.dataUrl);
-
   await window.editorAPI.writeFile(destPath, html);
-  if (dataImgs.length)  await window.editorAPI.copyImages(dir + '/images', dataImgs);
-  if (assetRefs.length) await window.editorAPI.copyAssetsToDir(assetRefs, dir + '/images');
   setStatus('Exported to ' + destPath);
 }
 
@@ -1234,7 +1419,8 @@ function resolveImgUrl(src) {
 }
 
 async function previewHTML() {
-  saveCurrentSectionObjects();
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
   setStatus('Generating preview…');
 
   // Load all referenced asset images as data URLs so the preview file is self-contained.
@@ -1544,6 +1730,7 @@ function bindMenuEvents() {
 /* ── Bootstrap ──────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   buildFontPicker();
+  renderTextStyles();
   initCanvas();
   bindToolbar();
   bindSectionProps();

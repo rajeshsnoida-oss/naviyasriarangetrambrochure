@@ -1,8 +1,8 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-20
-**Last drift-check**: 2026-05-12 — mode: design — 0 resolved, 2 skipped
+**Last updated**: 2026-05-21
+**Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
 
@@ -30,6 +30,10 @@
 - 2026-05-16 Editor: justify text alignment added (Fabric justify-left; CSS text-align:justify)
 - 2026-05-17 Editor: HTML preview/export position fixes — origin-aware fabricLeft/Top helpers; transform-origin:top left for rotated images/shapes; removed object-fit:contain from image render (was causing border/divider images to appear visually misplaced); D-027–D-029 logged
 - 2026-05-20 Editor: font preloading fix — await document.fonts.load() for all web fonts used in project before Fabric initSections(); replaced unreliable document.fonts.ready with explicit per-font loads + initDimensions() in switchSection afterLoad; fixes words concatenated without spaces in Textbox (wrong fallback font metrics at measureText time)
+- 2026-05-21 Editor: text style presets — 5 built-in presets (Title/Subtitle/Body/Caption/Heading); "Capture" button saves selected text object's style as a named preset; chips in right panel apply style to selection; persisted in .brochure JSON; loaded on project open/new
+- 2026-05-21 Editor: snapshotCurrentSection — discards active object before serialising (forces Fabric _restoreObjectsState so group-relative coords convert to absolute); prevents multi-select save from corrupting objects; used in save/export/preview/section-switch; D-032
+- 2026-05-21 Editor: propagateBgToAll + bgSettingsFrom fix — now copies bgImage and bgSize when propagating background to all sections (was silently dropping image backgrounds)
+- 2026-05-21 Editor: self-contained HTML export — pre-loads all asset:// images as data URLs before render; exported HTML embeds images inline; no separate images/ folder required; D-033
 
 ## In progress
 
