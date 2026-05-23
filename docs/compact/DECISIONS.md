@@ -1,5 +1,41 @@
 # Decisions
 
+## D-036 — Single-file export required for mobile file:// opening
+
+**Status**: Active
+**Date**: 2026-05-22
+**Context**: During this session an intermediate folder-based export was briefly implemented: `objectToHTML` wrote `images/name` relative paths and `copyAssetsToDir` copied files to an `images/` subfolder. When the user copied `index.html` + `images/` to a smartphone and opened the file locally, images did not load.
+**Decision**: Export must produce a single self-contained HTML file with all images embedded as base64 data URLs. No `images/` folder. Implemented via D-035's streaming substitution in the main process.
+**Why**: Mobile browsers (Chrome on Android, Safari on iOS) block loading subresource files referenced by relative paths from a `file://` URL. This is a browser security policy that cannot be worked around without a local HTTP server. Embedding images as data URLs inside the HTML file is the only approach that works when the file is opened directly from a phone's file manager.
+**Consequences**: Exported HTML file size is ~33% larger than the raw image total due to base64 encoding. A brochure with 20 MB of photos produces a ~27 MB HTML file — acceptable for a single event's digital brochure. Users cannot easily inspect or replace individual images in the export without re-exporting from the editor.
+**Alternatives considered**:
+  - Folder-based export — rejected; broken on mobile file:// (confirmed by user).
+  - Instruct users to run a local HTTP server — rejected; not appropriate for the target user (non-technical event owner opening files on a phone).
+
+## D-035 — Export self-contained via main-process streaming substitution (replaces D-033)
+
+**Status**: Supersedes D-033
+**Date**: 2026-05-22
+**Context**: D-033 embedded data URLs in the renderer, passing the entire HTML string over IPC to `fs:writeFile`. This failed with `RangeError: Invalid string length` at `Array.join` in the main process when images were large enough to push the substituted string past V8's limit. An intermediate folder-based export (images/ folder alongside the HTML) was tried but immediately rejected — see D-036.
+**Decision**: A new `export:writeSelfContained` IPC handler receives only the small HTML template (with `images/name` placeholder paths) and a list of asset filenames. The main process reads each asset file from disk, then streams the final HTML to disk via `fs.createWriteStream`: it scans the template for `images/name` markers, writes each text segment, then writes the corresponding base64 data URL directly to the stream — never concatenating them into a single in-memory string.
+**Why**: The renderer only transfers ~50–200 KB of HTML template and a small filename list over IPC. The main process builds each data URL independently; each is written to disk and can be GC'd before the next. Peak memory is one data URL at a time (~1.33× one image file) rather than the sum of all data URLs. Exported HTML remains a single self-contained file (required for mobile — see D-036).
+**Consequences**: Export is slightly slower for large projects (sequential file reads + stream writes). The main process must have access to `getAssetsDir()` at export time — already true. Any `data:` URL images collected by `collectImage` (edge case: images never saved to disk) are not embedded; they appear as broken `images/name` links in the export. In the current UI all images are saved as asset files so this is not a practical issue.
+**Alternatives considered**:
+  - Keep D-033 renderer-side embedding — rejected; hits V8 string limit for large images.
+  - Folder-based export (images/ folder) — rejected; see D-036.
+
+## D-034 — Folder-based temp dir for preview (no data URLs over IPC)
+
+**Status**: Active
+**Date**: 2026-05-22
+**Context**: `previewHTML` previously loaded all asset images as base64 data URLs in the renderer, embedded them inline in the HTML string, then passed the full HTML over Electron IPC to `preview:open`. When images are large (several MB each, multiplied across sections that share a background), the combined HTML string exceeded V8's ~1 billion character string length limit, producing `RangeError: Invalid string length`.
+**Decision**: `previewHTML` now uses `objectToHTML` (folder-based renderer) instead of `objectToHTMLInline`. A new `preview:openFolder` IPC handler in the main process copies named asset files into `os.tmpdir()/brochure-preview/images/`, writes the small HTML (with `images/name` relative paths) to `os.tmpdir()/brochure-preview/index.html`, and opens it. The renderer never touches base64 data.
+**Why**: Keeping all file I/O in the main process means only a small HTML template (~50–200 KB) and a list of filenames cross the IPC boundary. The base64 data stays on disk. Eliminates the string-size constraint entirely.
+**Consequences**: Preview requires a real file write to disk before opening. On slow disks with many large images this adds a brief delay. The temp folder is wiped and recreated on each preview — stale previews from previous opens are discarded.
+**Alternatives considered**:
+  - Chunk the HTML over IPC — rejected; complex protocol, still bottlenecked by V8.
+  - Cap image resolution before embedding — rejected; lossy, changes what the user sees.
+
 ## D-033 — Self-contained HTML export via pre-loaded data URLs
 
 **Status**: Active

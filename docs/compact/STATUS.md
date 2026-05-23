@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-21
+**Last updated**: 2026-05-22
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -34,6 +34,11 @@
 - 2026-05-21 Editor: snapshotCurrentSection — discards active object before serialising (forces Fabric _restoreObjectsState so group-relative coords convert to absolute); prevents multi-select save from corrupting objects; used in save/export/preview/section-switch; D-032
 - 2026-05-21 Editor: propagateBgToAll + bgSettingsFrom fix — now copies bgImage and bgSize when propagating background to all sections (was silently dropping image backgrounds)
 - 2026-05-21 Editor: self-contained HTML export — pre-loads all asset:// images as data URLs before render; exported HTML embeds images inline; no separate images/ folder required; D-033
+- 2026-05-22 Editor: preview fixed — folder-based temp dir (images/ + small HTML over IPC); eliminates "invalid string length" on large projects; D-034
+- 2026-05-22 Editor: delete section bug fixed — activeSec reset to -1 before switchSection() so early-return guard doesn't fire and empty canvas isn't snapshotted over surviving section
+- 2026-05-22 Editor: preview phone notch removed — position:absolute overlay was hiding first section header
+- 2026-05-22 Editor: 12px gap between sections in preview and export; export inline margin fixed; preview scaledH accounts for gaps
+- 2026-05-22 Editor: export HTML self-contained — main process streams base64 substitution via WriteStream; works when opened via file:// on mobile; no V8 string limit hit; D-035, D-036
 
 ## In progress
 

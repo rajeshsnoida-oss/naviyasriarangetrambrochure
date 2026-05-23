@@ -530,12 +530,15 @@ function bindSectionProps() {
   document.getElementById('btn-delete-section').addEventListener('click', () => {
     if (sections.length <= 1) { setStatus('Cannot delete the only section.'); return; }
     if (!confirm(`Delete section "${sections[activeSec].label}"?`)) return;
+    // Compute target BEFORE splice (length-2 pre-splice == length-1 post-splice).
+    const newActive = Math.min(activeSec, sections.length - 2);
     sections.splice(activeSec, 1);
     history.splice(activeSec, 1);
     historyIdx.splice(activeSec, 1);
-    activeSec = Math.min(activeSec, sections.length - 1);
-    canvas.remove(...canvas.getObjects());
-    switchSection(activeSec);
+    // Reset to -1 so switchSection doesn't early-return (idx === activeSec guard)
+    // and snapshotCurrentSection skips saving the now-stale canvas.
+    activeSec = -1;
+    switchSection(newActive);
     markDirty();
   });
 }
@@ -1223,43 +1226,26 @@ async function exportHTML() {
   const destPath = await window.editorAPI.exportDir();
   if (!destPath) return;
 
-  setStatus('Bundling assets…');
+  setStatus('Exporting…');
   try {
-  // Pre-load every asset:// image as a data URL so the exported HTML is fully
-  // self-contained — no separate images/ folder required.
-  const assetNames = new Set();
-  sections.forEach(sec => {
-    if (sec.bgImage?.startsWith('asset://')) assetNames.add(assetName(sec.bgImage));
-    (sec.objects || []).forEach(o => {
-      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(assetName(o.src));
-    });
-  });
-  _assetCache = {};
-  for (const name of assetNames) {
-    const dataUrl = await window.editorAPI.readAsset(name);
-    if (dataUrl) _assetCache['asset://' + name] = dataUrl;
-  }
+    const usedFonts = new Set();
+    const images    = [];
+    const seenNames = new Set();
 
-  const usedFonts = new Set();
+    const sectionsHTML = sections.map(sec => {
+      const bgStyle  = buildBgStyleForFolder(sec, seenNames, images);
+      const objsHtml = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames)).join('\n');
+      return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;margin:0 auto 12px;">\n${objsHtml}\n  </section>`;
+    }).join('\n\n');
 
-  const sectionsHTML = sections.map(sec => {
-    let bgStyle = sectionBgCSS(sec);
-    if (sec.bgImage) {
-      const bg = resolveImgUrl(sec.bgImage) || sec.bgImage;
-      bgStyle = `background:url('${bg}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
-    }
-    const objsHtml = (sec.objects || []).map(o => objectToHTMLInline(o, sec, usedFonts)).join('\n');
-    return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;margin:0 auto;">\n${objsHtml}\n  </section>`;
-  }).join('\n\n');
-
-  const googleFontsUrl = buildGoogleFontsUrl(usedFonts);
-  const fontsLink = googleFontsUrl
-    ? `  <link rel="preconnect" href="https://fonts.googleapis.com">
+    const googleFontsUrl = buildGoogleFontsUrl(usedFonts);
+    const fontsLink = googleFontsUrl
+      ? `  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="${googleFontsUrl}" rel="stylesheet">`
-    : '';
+      : '';
 
-  const html = `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1271,7 +1257,7 @@ ${fontsLink}
     body { background: #111; overflow-x: hidden; }
     #brochure-wrap { width: 100%; overflow: hidden; }
     #brochure-inner { transform-origin: top left; }
-    .bs { box-sizing: border-box; }
+    .bs { box-sizing: border-box; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -1297,9 +1283,13 @@ ${sectionsHTML}
 </body>
 </html>`;
 
-  await window.editorAPI.writeFile(destPath, html);
-  setStatus('Exported to ' + destPath);
+    // Main process reads assets from disk and substitutes inline base64 data URLs
+    // so the exported HTML is self-contained — required for file:// on mobile.
+    const assetRefs = images.filter(img => img.assetRef).map(img => img.name);
+    await window.editorAPI.exportSelfContained(destPath, html, assetRefs);
+    setStatus('Exported to ' + destPath);
   } catch (e) {
+    console.error('Export failed:', e);
     setStatus('Export failed: ' + (e && e.message ? e.message : String(e)));
   }
 }
@@ -1389,7 +1379,7 @@ function safeColor(color, fallback) {
 function collectImage(src, seenNames, images) {
   if (!src) return '';
   if (src.startsWith('asset://')) {
-    const name = src.slice(8); // strip 'asset://'
+    const name = assetName(src);
     if (!seenNames.has(name)) { seenNames.add(name); images.push({ name, assetRef: name }); }
     return name;
   }
@@ -1410,21 +1400,24 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-/* ── Preview ────────────────────────────────────────────────────────────── */
+/* ── Preview / Export helpers ────────────────────────────────────────────── */
 
-// Populated before preview HTML is generated; maps 'asset://name' → data URL.
-// Allows objectToHTMLInline to inline asset images without async calls.
-let _assetCache = {};
 function assetName(src) {
-  // Chromium normalises asset://img.png → asset://img.png/ (adds trailing slash for empty path).
+  // Chromium normalises asset://img.png → asset://img.png/ (trailing slash for empty path).
   // Use URL.hostname to reliably strip the scheme + any trailing slash.
   try { return new URL(src).hostname; } catch { return src.slice(8); }
 }
 
-function resolveImgUrl(src) {
-  if (!src) return '';
-  if (src.startsWith('asset://')) return _assetCache['asset://' + assetName(src)] || '';
-  return src;
+// Build the CSS background string for a section, collecting any asset image
+// into the shared `images` array so the caller can copy files to disk.
+function buildBgStyleForFolder(sec, seenNames, images) {
+  if (!sec.bgImage) return sectionBgCSS(sec);
+  if (sec.bgImage.startsWith('asset://')) {
+    const name = assetName(sec.bgImage);
+    if (!seenNames.has(name)) { seenNames.add(name); images.push({ name, assetRef: name }); }
+    return `background:url('images/${name}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
+  }
+  return `background:url('${sec.bgImage}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
 }
 
 async function previewHTML() {
@@ -1432,46 +1425,29 @@ async function previewHTML() {
   snapshotCurrentSection();
   setStatus('Generating preview…');
   try {
-  // Load all referenced asset images as data URLs so the preview file is self-contained.
-  const assetNames = new Set();
-  sections.forEach(sec => {
-    if (sec.bgImage?.startsWith('asset://')) assetNames.add(assetName(sec.bgImage));
-    (sec.objects || []).forEach(o => {
-      if (o.type === 'image' && o.src?.startsWith('asset://')) assetNames.add(assetName(o.src));
-    });
-  });
-  _assetCache = {};
-  for (const name of assetNames) {
-    const dataUrl = await window.editorAPI.readAsset(name);
-    if (dataUrl) _assetCache['asset://' + name] = dataUrl;
-  }
+    const usedFonts = new Set();
+    const images    = [];
+    const seenNames = new Set();
 
-  const usedFonts = new Set();
+    const sectionsHTML = sections.map(sec => {
+      const bgStyle  = buildBgStyleForFolder(sec, seenNames, images);
+      const objsHtml = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames)).join('\n');
+      return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;">\n${objsHtml}\n  </section>`;
+    }).join('\n\n');
 
-  // Inline images as data-URIs so the temp file is self-contained
-  const sectionsHTML = sections.map(sec => {
-    let bgStyle = sectionBgCSS(sec);
-    if (sec.bgImage) {
-      const bg = resolveImgUrl(sec.bgImage) || sec.bgImage;
-      bgStyle = `background:url('${bg}') center/${sec.bgSize||'cover'} no-repeat, ${sec.bg};`;
-    }
-    const objsHtml = (sec.objects || []).map(o => objectToHTMLInline(o, sec, usedFonts)).join('\n');
-    return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;">\n${objsHtml}\n  </section>`;
-  }).join('\n\n');
+    const totalHeight = sections.reduce((s, sec) => s + (sec.height || 600), 0) + sections.length * 12;
+    const PHONE_W = 390;
+    const scale   = PHONE_W / CANVAS_W;
+    const scaledH = Math.round(totalHeight * scale);
 
-  const totalHeight = sections.reduce((s, sec) => s + (sec.height || 600), 0);
-  const PHONE_W = 390;
-  const scale = PHONE_W / CANVAS_W;
-  const scaledH = Math.round(totalHeight * scale);
-
-  const googleFontsUrl = buildGoogleFontsUrl(usedFonts);
-  const fontsLink = googleFontsUrl
-    ? `<link rel="preconnect" href="https://fonts.googleapis.com">
+    const googleFontsUrl = buildGoogleFontsUrl(usedFonts);
+    const fontsLink = googleFontsUrl
+      ? `<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="${googleFontsUrl}" rel="stylesheet">`
-    : '';
+      : '';
 
-  const html = `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1481,17 +1457,15 @@ ${fontsLink}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;padding:40px 16px;font-family:sans-serif}
 .preview-label{color:#777;font-size:11px;margin-bottom:14px;letter-spacing:0.08em;text-transform:uppercase}
-.phone-frame{width:406px;border-radius:48px;border:8px solid #444;background:#000;box-shadow:0 0 0 1px #555,0 32px 80px rgba(0,0,0,0.7);overflow:hidden;position:relative}
-.phone-notch{width:120px;height:30px;background:#000;border-radius:0 0 20px 20px;position:absolute;top:0;left:50%;transform:translateX(-50%);z-index:10}
+.phone-frame{width:406px;border-radius:48px;border:8px solid #444;background:#000;box-shadow:0 0 0 1px #555,0 32px 80px rgba(0,0,0,0.7);overflow:hidden}
 .phone-screen{overflow:hidden;position:relative;height:${scaledH}px}
 .phone-content{transform-origin:top left;transform:scale(${scale.toFixed(4)});width:${CANVAS_W}px;position:absolute;top:0;left:0}
-.bs{position:relative;overflow:hidden}
+.bs{position:relative;overflow:hidden;margin-bottom:12px}
 </style>
 </head>
 <body>
 <div class="preview-label">Mobile Preview — 390px</div>
 <div class="phone-frame">
-  <div class="phone-notch"></div>
   <div class="phone-screen">
     <div class="phone-content">
 ${sectionsHTML}
@@ -1501,64 +1475,15 @@ ${sectionsHTML}
 </body>
 </html>`;
 
-  await window.editorAPI.previewOpen(html);
-  setStatus('Preview opened in browser.');
+    const assetRefs   = images.filter(img => img.assetRef).map(img => img.name);
+    const dataUrlImgs = images.filter(img => img.dataUrl);
+    await window.editorAPI.previewOpenFolder(html, assetRefs, dataUrlImgs);
+    setStatus('Preview opened in browser.');
   } catch (e) {
     setStatus('Preview failed: ' + (e && e.message ? e.message : String(e)));
   }
 }
 
-function objectToHTMLInline(o, sec, usedFonts) {
-  const pxL  = fabricLeft(o) + 'px';
-  const pxT  = fabricTop(o)  + 'px';
-  const angle = o.angle ? `transform:rotate(${o.angle}deg);transform-origin:top left;` : '';
-  const opacity = (o.opacity != null && o.opacity < 1) ? `opacity:${o.opacity.toFixed(2)};` : '';
-
-  if (o.type === 'i-text' || o.type === 'textbox') {
-    const ff  = o.fontFamily || 'Georgia';
-    const sx  = o.scaleX || 1;
-    const sy  = o.scaleY || 1;
-    const fz  = Math.round((o.fontSize || 16) * sy);
-    const fw  = o.fontWeight  || 'normal';
-    const fi  = o.fontStyle   || 'normal';
-    const td  = o.underline   ? 'underline' : 'none';
-    const col = safeColor(o.fill, '#000000');
-    const ta  = (o.textAlign === 'justify-left') ? 'justify' : (o.textAlign || 'left');
-    const lh  = (o.lineHeight || 1.16).toFixed(2);
-    const w   = Math.round((o.width || 200) * sx);
-    const ws  = (o.type === 'textbox') ? 'pre-wrap' : 'pre';
-    const txf = buildTransform(o.angle, sx);
-    const tsh = shadowToCSS(o.shadow);
-    usedFonts.add(ff);
-    return `    <p style="position:absolute;left:${pxL};top:${pxT};width:${w}px;` +
-      `font-family:'${ff}',serif;font-size:${fz}px;font-weight:${fw};font-style:${fi};` +
-      `text-decoration:${td};color:${col};text-align:${ta};line-height:${lh};` +
-      `${txf}${tsh}${opacity}margin:0;padding:0;white-space:${ws};">` +
-      `${escHtml(o.text || '')}</p>`;
-  }
-
-  if (o.type === 'image') {
-    const src    = resolveImgUrl(o.src); // asset:// → data URL; blob:// → ''
-    const w      = Math.round((o.width  || 100) * (o.scaleX || 1));
-    const h      = Math.round((o.height || 100) * (o.scaleY || 1));
-    const border = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
-    if (!src) return '';
-    return `    <img src="${src}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
-      `width:${w}px;height:${h}px;${border}${angle}${opacity}">`;
-  }
-
-  if (['rect','circle','ellipse','triangle'].includes(o.type)) {
-    const w  = Math.round((o.width  || 100) * (o.scaleX || 1));
-    const h  = Math.round((o.height || 100) * (o.scaleY || 1));
-    const bg = safeColor(o.fill,   'transparent');
-    const bc = safeColor(o.stroke, 'transparent');
-    const bw = o.strokeWidth || 0;
-    const br = (o.type === 'circle' || o.type === 'ellipse') ? 'border-radius:50%;' : '';
-    return `    <div style="position:absolute;left:${pxL};top:${pxT};width:${w}px;height:${h}px;` +
-      `background:${bg};border:${bw}px solid ${bc};${br}${angle}${opacity}"></div>`;
-  }
-  return '';
-}
 
 /* ── Status / title helpers ─────────────────────────────────────────────── */
 function setStatus(msg) { document.getElementById('status-msg').textContent = msg; }
