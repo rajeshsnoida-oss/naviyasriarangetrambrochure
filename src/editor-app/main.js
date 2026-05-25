@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell, clipboard, nativeImage } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
@@ -183,16 +183,30 @@ ipcMain.handle('fs:writeFile', async (_e, filePath, data) => {
 });
 
 // Write index.html + images/ to a target directory for GitHub Pages hosting.
-// Uses relative `images/<name>` paths in the HTML — no base64 embedding.
+// PNGs wider than 900px (2× the 450px canvas) are resized with nativeImage to
+// shrink AI-cutout files from 30–50 MB down to a few hundred KB. WebP/JPEG are
+// already compressed and copied as-is.
 ipcMain.handle('export:writeToRepo', async (_e, dir, html, assetNames) => {
+  const MAX_W = 900;
   const imgDir = path.join(dir, 'images');
   fs.mkdirSync(imgDir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'index.html'), html, 'utf8');
   const src = getAssetsDir();
   for (const name of (assetNames || [])) {
     const srcFile = path.join(src, name);
-    if (fs.existsSync(srcFile)) fs.copyFileSync(srcFile, path.join(imgDir, name));
-    else console.warn('asset not found:', srcFile);
+    if (!fs.existsSync(srcFile)) { console.warn('asset not found:', srcFile); continue; }
+    const destFile = path.join(imgDir, name);
+    if (path.extname(name).toLowerCase() === '.png') {
+      try {
+        const img = nativeImage.createFromPath(srcFile);
+        const { width } = img.getSize();
+        if (width > MAX_W) {
+          fs.writeFileSync(destFile, img.resize({ width: MAX_W, quality: 'better' }).toPNG());
+          continue;
+        }
+      } catch (e) { console.warn('resize failed, copying original:', name, e.message); }
+    }
+    fs.copyFileSync(srcFile, destFile);
   }
   return true;
 });

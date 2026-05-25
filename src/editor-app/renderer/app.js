@@ -1253,11 +1253,12 @@ async function exportHTML() {
   <title>Arangetram Brochure</title>
 ${fontsLink}
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
     body { background: #111; overflow-x: hidden; }
     #brochure-wrap { width: 100%; overflow: hidden; }
-    #brochure-inner { transform-origin: top left; }
-    .bs { box-sizing: border-box; margin-bottom: 12px; }
+    #brochure-inner { transform-origin: top left; will-change: transform; }
+    .bs { box-sizing: border-box; margin-bottom: 12px; content-visibility: auto; contain-intrinsic-size: auto 800px; }
+    img { pointer-events: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
   </style>
 </head>
 <body>
@@ -1278,6 +1279,10 @@ ${sectionsHTML}
   }
   fit();
   window.addEventListener('resize',fit);
+  document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  document.addEventListener('keydown', function(e){
+    if (e.ctrlKey && (e.key==='s' || e.key==='u')) e.preventDefault();
+  });
 })();
 </script>
 </body>
@@ -1350,8 +1355,9 @@ function objectToHTML(o, sec, usedFonts, images, seenNames) {
     const w      = Math.round((o.width  || 100) * (o.scaleX || 1));
     const h      = Math.round((o.height || 100) * (o.scaleY || 1));
     const border = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
-    return `    <img src="images/${name}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
-      `width:${w}px;height:${h}px;${border}${rotateCss}${opacity}">`;
+    return `    <img src="images/${name}" alt="" loading="lazy" draggable="false" style="position:absolute;left:${pxL};top:${pxT};` +
+      `width:${w}px;height:${h}px;${border}${rotateCss}${opacity}">` +
+      `\n    <div style="position:absolute;left:${pxL};top:${pxT};width:${w}px;height:${h}px;z-index:1;"></div>`;
   }
 
   if (['rect','circle','ellipse','triangle'].includes(o.type)) {
