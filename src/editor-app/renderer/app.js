@@ -1283,11 +1283,9 @@ ${sectionsHTML}
 </body>
 </html>`;
 
-    // Main process reads assets from disk and substitutes inline base64 data URLs
-    // so the exported HTML is self-contained — required for file:// on mobile.
     const assetRefs = images.filter(img => img.assetRef).map(img => img.name);
-    await window.editorAPI.exportSelfContained(destPath, html, assetRefs);
-    setStatus('Exported to ' + destPath);
+    await window.editorAPI.exportToRepo(destPath, html, assetRefs);
+    setStatus('Exported: index.html + images/ written to ' + destPath);
   } catch (e) {
     console.error('Export failed:', e);
     setStatus('Export failed: ' + (e && e.message ? e.message : String(e)));

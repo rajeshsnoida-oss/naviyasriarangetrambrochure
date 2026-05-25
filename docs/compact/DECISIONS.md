@@ -1,5 +1,25 @@
 # Decisions
 
+## D-037 — Export format changed to GitHub Pages folder layout
+
+- **Date:** 2026-05-24
+- **Status:** decided
+- **Context:** The brochure will be hosted on GitHub Pages. The previous export
+  (D-035, D-036) produced a self-contained single HTML file with base64-embedded
+  images via main-process streaming substitution, designed to work via file:// on
+  mobile. GitHub Pages was always the ultimate hosting objective.
+- **Decision:** Export now writes `index.html` + `images/` folder to a
+  user-chosen directory (folder picker dialog). No base64 embedding. Self-contained
+  single-file export is removed entirely.
+- **Why:** GitHub Pages serves static files natively — folder layout is exactly
+  what it expects. Base64 embedding is unnecessary overhead when files are served
+  over HTTP. The self-contained approach was a detour from the real target.
+- **Consequences:** Exported HTML will not load via file:// on mobile (images/ in
+  a separate folder is blocked by browser security policy) — accepted, since
+  GitHub Pages is the deployment target. Export is simpler: no streaming
+  substitution, no base64 encoding, smaller HTML files. Workflow: export to repo
+  root → commit index.html + images/ → push → GitHub Pages serves it.
+
 ## D-036 — Single-file export required for mobile file:// opening
 
 **Status**: Active

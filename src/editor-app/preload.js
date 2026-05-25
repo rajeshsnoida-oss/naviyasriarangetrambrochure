@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('editorAPI', {
   openProject:  ()              => ipcRenderer.invoke('dialog:openProject'),
   saveProject:  (defaultPath)  => ipcRenderer.invoke('dialog:saveProject', defaultPath),
   writeFile:            (path, data)        => ipcRenderer.invoke('fs:writeFile', path, data),
-  exportSelfContained:  (path, html, names) => ipcRenderer.invoke('export:writeSelfContained', path, html, names),
+  exportToRepo:         (dir, html, names)  => ipcRenderer.invoke('export:writeToRepo', dir, html, names),
   readFile:     (path)         => ipcRenderer.invoke('fs:readFile', path),
   openImages:   ()             => ipcRenderer.invoke('dialog:openImages'),
   exportDir:    ()             => ipcRenderer.invoke('dialog:exportDir'),

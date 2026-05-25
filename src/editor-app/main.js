@@ -182,55 +182,19 @@ ipcMain.handle('fs:writeFile', async (_e, filePath, data) => {
   return true;
 });
 
-// Write a self-contained HTML export: reads each named asset from disk,
-// substitutes every `images/<name>` reference with an inline base64 data URL,
-// then writes the result. All heavy work stays in the main process so the
-// renderer never has to build or transfer a large string over IPC.
-// Write a self-contained HTML export by streaming: scans the HTML template for
-// `images/<name>` markers and writes each text segment + base64 data URL directly
-// to disk. Never builds the fully-substituted string in memory, so V8's string
-// length limit is not a concern even with large images.
-ipcMain.handle('export:writeSelfContained', async (_e, destPath, html, assetNames) => {
-  const MIME = {
-    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-  };
-  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+// Write index.html + images/ to a target directory for GitHub Pages hosting.
+// Uses relative `images/<name>` paths in the HTML — no base64 embedding.
+ipcMain.handle('export:writeToRepo', async (_e, dir, html, assetNames) => {
+  const imgDir = path.join(dir, 'images');
+  fs.mkdirSync(imgDir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'index.html'), html, 'utf8');
   const src = getAssetsDir();
-
-  // Build marker → data-URL map (each dataUrl is independent, not concatenated).
-  const subs = new Map();
   for (const name of (assetNames || [])) {
-    const file = path.join(src, name);
-    if (!fs.existsSync(file)) { console.warn('asset not found:', file); continue; }
-    const mime = MIME[path.extname(file).toLowerCase()] || 'image/png';
-    subs.set('images/' + name, `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`);
+    const srcFile = path.join(src, name);
+    if (fs.existsSync(srcFile)) fs.copyFileSync(srcFile, path.join(imgDir, name));
+    else console.warn('asset not found:', srcFile);
   }
-
-  return new Promise((resolve, reject) => {
-    const ws = fs.createWriteStream(destPath, { encoding: 'utf8' });
-    ws.on('error', reject);
-    ws.on('finish', () => resolve(true));
-
-    if (subs.size === 0) { ws.end(html || ''); return; }
-
-    const markers = [...subs.keys()];
-    let pos = 0;
-    while (pos < html.length) {
-      // Find the nearest marker from current position.
-      let nearestIdx = -1;
-      let nearestMarker = null;
-      for (const m of markers) {
-        const i = html.indexOf(m, pos);
-        if (i !== -1 && (nearestIdx === -1 || i < nearestIdx)) { nearestIdx = i; nearestMarker = m; }
-      }
-      if (nearestIdx === -1) { ws.write(html.slice(pos)); break; }
-      if (nearestIdx > pos)  ws.write(html.slice(pos, nearestIdx));
-      ws.write(subs.get(nearestMarker));
-      pos = nearestIdx + nearestMarker.length;
-    }
-    ws.end();
-  });
+  return true;
 });
 
 // Return source paths only — no base64. The renderer calls asset:import to copy.
@@ -244,12 +208,12 @@ ipcMain.handle('dialog:openImages', async () => {
 });
 
 ipcMain.handle('dialog:exportDir', async () => {
-  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    defaultPath: 'index.html',
-    filters: [{ name: 'HTML file', extensions: ['html'] }],
-    title: 'Export — choose where to save index.html',
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Export — choose target folder (index.html + images/ will be written here)',
+    buttonLabel: 'Export here',
   });
-  return canceled ? null : filePath;
+  return canceled ? null : filePaths[0];
 });
 
 ipcMain.handle('fs:readFile', async (_e, filePath) => {
