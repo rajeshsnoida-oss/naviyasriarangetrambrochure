@@ -1,5 +1,44 @@
 # Decisions
 
+## D-039 — Transparent overlay divs to block mobile long-press image save
+
+- **Date:** 2026-05-24
+- **Status:** decided
+- **Context:** `pointer-events: none` on `<img>` elements does not prevent Android
+  Chrome's long-press "Save image" — the browser detects the image at the pixel
+  level regardless of CSS. `-webkit-touch-callout: none` handles iOS Safari but
+  not Android.
+- **Decision:** `objectToHTML` in app.js injects a transparent `<div>` (same
+  `position:absolute`, same left/top/width/height, `z-index:1`) immediately after
+  every `<img>` in the exported HTML. Combined with `-webkit-touch-callout: none`
+  on the `img` CSS rule.
+- **Why:** The overlay div intercepts the long-press touch event so Android Chrome
+  sees the div, not the img, and does not offer "Save image". No JavaScript
+  required — pure DOM structure.
+- **Consequences:** One extra DOM node per image in the exported HTML. The `z-index:1`
+  overlay would intercept tap/click handlers on images if any were added in future;
+  acceptable for the current read-only brochure. Determined users with DevTools
+  can still access images via the Network tab — this blocks casual saving only.
+
+## D-038 — PNG images resized to 900px during GitHub Pages export
+
+- **Date:** 2026-05-24
+- **Status:** decided
+- **Context:** AI-cutout PNG images in the brochure were 30–50 MB each (4000–5000px
+  wide), causing slow page load even with lazy loading. The Fabric canvas is 450px
+  wide, so the originals were 9× larger than any screen could display.
+- **Decision:** `export:writeToRepo` in main.js uses Electron's `nativeImage` to
+  resize any PNG wider than 900px down to 900px before writing to the `images/`
+  folder. WebP and JPEG files are copied as-is (already compressed). MAX_W=900 is
+  a named constant for easy adjustment.
+- **Why:** 900px = 2× the 450px canvas — retina-quality for standard and 2×HiDPI
+  screens. Originals provided no visual benefit beyond that. nativeImage is built
+  into Electron so no new dependency is needed.
+- **Consequences:** 3× HiDPI phones (e.g. iPhone Pro) receive slightly soft images
+  at their native resolution; imperceptible at typical viewing distances. User can
+  raise MAX_W to 1350 (3×) with a one-line change if quality is insufficient.
+  Export takes slightly longer due to in-process resize.
+
 ## D-037 — Export format changed to GitHub Pages folder layout
 
 - **Date:** 2026-05-24

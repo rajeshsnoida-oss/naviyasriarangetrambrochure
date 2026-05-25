@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-24
+**Last updated**: 2026-05-25
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -40,6 +40,7 @@
 - 2026-05-22 Editor: 12px gap between sections in preview and export; export inline margin fixed; preview scaledH accounts for gaps
 - 2026-05-22 Editor: export HTML self-contained — main process streams base64 substitution via WriteStream; works when opened via file:// on mobile; no V8 string limit hit; D-035, D-036
 - 2026-05-24 Editor: export changed to GitHub Pages folder format — writes index.html + images/ to chosen directory; folder picker replaces single-file save dialog; D-037
+- 2026-05-24 Brochure published to GitHub Pages — lazy loading, mobile download protection (overlay divs + touch-callout), PNG resize to 900px via nativeImage, will-change + content-visibility for smooth scroll/zoom; D-038, D-039
 
 ## In progress
 
@@ -47,8 +48,8 @@
 
 ## Next
 
-- **Publish to GitHub Pages**: export to repo root (Ctrl+E), commit index.html + images/, push, then enable GitHub Pages in repo Settings → Pages → Source: main branch / (root)
 - **Use the editor**: double-click `src\editor-app\start.bat`
+- If image quality looks soft on high-DPI phones, raise MAX_W 900→1350 in src/editor-app/main.js, re-export and push
 - `/switch-phase development feedback` — implement feedback module (Google Apps Script integration; highest risk)
 - Provide border image assets: assets/images/border-kolam.png and assets/images/border-bottom.png (seamless horizontal tile, ≤96px tall, transparent PNG)
 - Populate index.html with actual event content (performer names, bio text, dance item details, photos) — use the editor for this
