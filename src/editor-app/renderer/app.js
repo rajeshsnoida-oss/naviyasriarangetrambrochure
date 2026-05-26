@@ -4,7 +4,7 @@ const CANVAS_W   = 794;
 const CANVAS_JSON_PROPS = [
   'name','fontFamily','fontWeight','fontStyle','underline','fill',
   'textAlign','fontSize','textBackgroundColor','lineHeight','charSpacing',
-  'stroke','strokeWidth','opacity','angle','_shadowPreset','_shadowColor',
+  'stroke','strokeWidth','opacity','angle','_shadowPreset','_shadowColor','_grayscale',
 ];
 const ZOOM_STEP  = 0.1;
 const ZOOM_MIN   = 0.2;
@@ -138,6 +138,8 @@ let historyIdx  = [];
 let removeBgFn  = null;
 let clipboard   = null;   // stores cloned Fabric objects for copy/paste
 let pasteOffset = 0;      // cumulative paste offset so repeated pastes don't stack exactly
+let _sectionGen     = 0;     // incremented on every switchSection to discard stale async callbacks
+let _sectionLoading = false; // true while loadFromJSON is in-flight; blocks snapshotCurrentSection
 
 /* ── Text style presets ─────────────────────────────────────────────────── */
 const DEFAULT_TEXT_STYLES = [
@@ -175,6 +177,23 @@ function buildFontPicker() {
 // text. Disabling caching makes Fabric redraw every object directly each frame —
 // fine for a brochure with ≤50 objects.
 fabric.Object.prototype.objectCaching = false;
+
+// Grayscale via ctx.filter — avoids the filter pipeline (which needs getImageData
+// and fails on asset:// images due to canvas taint). ctx.save/restore brackets the
+// filter so it is automatically cleared after the image is drawn.
+(function patchGrayscaleRender() {
+  const orig = fabric.Image.prototype._renderFill;
+  fabric.Image.prototype._renderFill = function(ctx) {
+    if (this._grayscale) {
+      ctx.save();
+      ctx.filter = 'grayscale(100%)';
+      orig.call(this, ctx);
+      ctx.restore();
+    } else {
+      orig.call(this, ctx);
+    }
+  };
+})();
 
 function initCanvas() {
   canvas = new fabric.Canvas('c', {
@@ -285,18 +304,38 @@ function propagateBgToAll(sourceSec) {
     if (i === activeSec) {
       applyCanvasBg(sec);
       if (sec.bgImage) {
-        fabric.Image.fromURL(sec.bgImage, img => {
-          canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
-            scaleX: CANVAS_W / img.width,
-            scaleY: sec.height / img.height,
-          });
-        }, { crossOrigin: 'anonymous' });
+        fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec), { crossOrigin: 'anonymous' });
       } else {
         canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
       }
     }
   });
   markDirty();
+}
+
+/* ── Canvas background image — match CSS background-size semantics ─────── */
+function applyBgImageToCanvas(img, sec, targetCanvas, callback) {
+  const W = CANVAS_W, H = sec.height;
+  const bgSize = sec.bgSize || 'cover';
+  let scaleX, scaleY;
+
+  if (bgSize === 'contain') {
+    const s = Math.min(W / img.width, H / img.height);
+    scaleX = scaleY = s;
+  } else if (bgSize === 'auto') {
+    scaleX = scaleY = 1;
+  } else {
+    // 'cover' (default): scale to cover while preserving aspect ratio
+    const s = Math.max(W / img.width, H / img.height);
+    scaleX = scaleY = s;
+  }
+
+  const left = (W - img.width  * scaleX) / 2;
+  const top  = (H - img.height * scaleY) / 2;
+  const cv   = targetCanvas || canvas;
+  const cb   = callback     || cv.renderAll.bind(cv);
+
+  cv.setBackgroundImage(img, cb, { scaleX, scaleY, left, top, originX: 'left', originY: 'top' });
 }
 
 /* ── Canvas background application ─────────────────────────────────────── */
@@ -323,6 +362,7 @@ function switchSection(idx) {
   snapshotCurrentSection();
   activeSec = idx;
   const sec = sections[idx];
+  const gen = ++_sectionGen; // any prior async callbacks with a stale gen will self-abort
 
   canvas.setHeight(Math.round(sec.height * zoom));
 
@@ -331,10 +371,8 @@ function switchSection(idx) {
     applyCanvasBg(sec);
     if (sec.bgImage) {
       fabric.Image.fromURL(sec.bgImage, img => {
-        canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
-          scaleX: CANVAS_W / img.width,
-          scaleY: sec.height / img.height,
-        });
+        if (gen !== _sectionGen) return; // stale: another switchSection ran
+        applyBgImageToCanvas(img, sec);
       }, { crossOrigin: 'anonymous' });
     }
     // Re-render once the section's web fonts are confirmed loaded.
@@ -365,10 +403,14 @@ function switchSection(idx) {
   canvas.off('object:removed', onCanvasChange);
   canvas.remove(...canvas.getObjects());
   if (sec.objects && sec.objects.length) {
+    _sectionLoading = true;
     canvas.loadFromJSON({ version: '5.3.0', objects: sec.objects }, () => {
-      // Snap every loaded object to physical-pixel-aligned coordinates.
-      // Objects created or dragged at zoom>1 end up with fractional left/top
-      // values that produce non-integer buffer pixels → blurry text edges.
+      _sectionLoading = false;
+      if (gen !== _sectionGen) return; // stale: another switchSection already ran
+      // Snap every loaded object to integer CSS-pixel coordinates so the
+      // canvas position matches the HTML preview (fabricLeft/Top also uses
+      // Math.round).  Fractional left/top from zoom>1 drags also cause
+      // blurry text edges in the canvas buffer, so this fixes both issues.
       canvas.getObjects().forEach(snapObjToPixel);
       afterLoad();
       canvas.on('object:added',   onCanvasChange);
@@ -397,6 +439,7 @@ function saveCurrentSectionObjects() {
 // floating-point drift that visibly resizes objects.
 function snapshotCurrentSection() {
   if (activeSec < 0 || activeSec >= sections.length) return;
+  if (_sectionLoading) return; // canvas is mid-load; objects are not yet valid
   const active = canvas.getActiveObject();
   if (active && active.type === 'activeSelection') {
     const members = active.getObjects().slice();
@@ -507,12 +550,7 @@ function bindSectionProps() {
     const assetName = await window.editorAPI.importAsset(imgs[0].srcPath);
     const assetUrl  = 'asset://' + assetName;
     sections[activeSec].bgImage = assetUrl;
-    fabric.Image.fromURL(assetUrl, img => {
-      canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
-        scaleX: CANVAS_W / img.width,
-        scaleY: sections[activeSec].height / img.height,
-      });
-    }, { crossOrigin: 'anonymous' });
+    fabric.Image.fromURL(assetUrl, img => applyBgImageToCanvas(img, sections[activeSec]), { crossOrigin: 'anonymous' });
     markDirty();
   });
   document.getElementById('sp-bg-clear-btn').addEventListener('click', () => {
@@ -595,6 +633,7 @@ function updateToolbar() {
     document.getElementById('prop-border-on').checked = hasBorder;
     document.getElementById('prop-border-color').value = fabricColorToHex(obj.stroke) || '#000000';
     document.getElementById('prop-border-width').value = obj.strokeWidth || 1;
+    document.getElementById('btn-grayscale').classList.toggle('on', !!obj._grayscale);
   }
   if (isShape) {
     document.getElementById('prop-shape-fill').value   = fabricColorToHex(obj.fill)   || '#c9a84c';
@@ -682,6 +721,13 @@ function bindToolbar() {
     canvas.renderAll();
   });
   document.getElementById('prop-opacity').addEventListener('change', () => onCanvasChange());
+  document.getElementById('btn-grayscale').addEventListener('click', () => {
+    const obj = canvas.getActiveObject(); if (!obj || obj.type !== 'image') return;
+    obj._grayscale = !obj._grayscale;
+    canvas.renderAll();
+    document.getElementById('btn-grayscale').classList.toggle('on', !!obj._grayscale);
+    onCanvasChange();
+  });
   document.getElementById('prop-border-on').addEventListener('change', e => {
     const obj = canvas.getActiveObject(); if (!obj) return;
     const w = e.target.checked ? (parseInt(document.getElementById('prop-border-width').value, 10) || 1) : 0;
@@ -742,9 +788,10 @@ function bindToolbar() {
   document.getElementById('btn-capture-style').addEventListener('click', captureTextStyle);
 
   // File ops
-  document.getElementById('btn-save').addEventListener('click',    () => saveProject(false));
-  document.getElementById('btn-preview').addEventListener('click', previewHTML);
-  document.getElementById('btn-export').addEventListener('click',  exportHTML);
+  document.getElementById('btn-save').addEventListener('click',         () => saveProject(false));
+  document.getElementById('btn-preview').addEventListener('click',      previewHTML);
+  document.getElementById('btn-export').addEventListener('click',       exportHTML);
+  document.getElementById('btn-export-print').addEventListener('click', exportPrint);
 }
 
 function applyText(prop, val) {
@@ -1004,7 +1051,7 @@ async function cutoutImage() {
 /* ── Undo / Redo ────────────────────────────────────────────────────────── */
 function pushHistory() {
   if (activeSec < 0) return;
-  const json = JSON.stringify(canvas.toJSON().objects);
+  const json = JSON.stringify(canvas.toJSON(CANVAS_JSON_PROPS).objects);
   const h    = history[activeSec];
   const idx  = historyIdx[activeSec];
   h.splice(idx + 1);
@@ -1043,14 +1090,26 @@ function onCanvasChange() {
 }
 
 function restoreHistory(json) {
+  if (activeSec < 0) return;
+  const sec = sections[activeSec];
+  const objects = JSON.parse(json);
   canvas.off('object:added',   onCanvasChange);
   canvas.off('object:removed', onCanvasChange);
   canvas.remove(...canvas.getObjects());
-  canvas.loadFromJSON({ version: '5.3.0', objects: JSON.parse(json) }, () => {
+  _sectionLoading = true;
+  canvas.loadFromJSON({ version: '5.3.0', objects }, () => {
+    _sectionLoading = false;
+    canvas.getObjects().forEach(snapObjToPixel);
+    // loadFromJSON calls canvas.clear() internally which resets backgroundColor
+    // and backgroundImage — re-apply them after the load completes.
+    applyCanvasBg(sec);
+    if (sec.bgImage) {
+      fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec), { crossOrigin: 'anonymous' });
+    }
     canvas.renderAll();
     canvas.on('object:added',   onCanvasChange);
     canvas.on('object:removed', onCanvasChange);
-    sections[activeSec].objects = JSON.parse(json);
+    sec.objects = objects;
   });
 }
 
@@ -1297,6 +1356,105 @@ ${sectionsHTML}
   }
 }
 
+/* ── Export for Print — renders each section to a PNG image file ─────────── */
+
+// Render one section to a PNG data URL using an off-screen Fabric.StaticCanvas.
+// multiplier=2 → 2× pixel density (≈190 DPI on A4) for crisp print output.
+function renderSectionToDataUrl(sec, multiplier) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('canvas');
+    el.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+    document.body.appendChild(el);
+
+    const fc = new fabric.StaticCanvas(el, {
+      width: CANVAS_W, height: sec.height, enableRetinaScaling: false,
+    });
+    const cleanup = () => { try { fc.dispose(); } catch {} el.remove(); };
+
+    const doExport = () => {
+      fc.renderAll();
+      try { resolve(fc.toDataURL({ format: 'png', multiplier })); }
+      catch (e) { reject(e); }
+      finally { cleanup(); }
+    };
+
+    // Apply background image on top of colour/gradient, then export.
+    const afterBgColor = () => {
+      if (sec.bgImage) {
+        fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec, fc, doExport), { crossOrigin: 'anonymous' });
+      } else {
+        doExport();
+      }
+    };
+
+    // Apply background colour / gradient / texture.
+    const applyBg = () => {
+      const type = sec.bgType || 'solid';
+      if (type === 'linear' || type === 'radial') {
+        const grad = makeFabricGradient(type, sec.bgGrad1 || '#ffffff', sec.bgGrad2 || '#000000',
+                                        sec.bgGradDir || 'to bottom', CANVAS_W, sec.height);
+        fc.setBackgroundColor(grad, afterBgColor);
+      } else if (type === 'texture') {
+        const svgUrl = makeTextureSVG(sec.bgTexture || 'dots', sec.bgTexFg || '#c9a84c', sec.bgTexBg || '#5a0a2e');
+        fabric.Image.fromURL(svgUrl, img => {
+          const pat = new fabric.Pattern({ source: img.getElement(), repeat: 'repeat' });
+          fc.setBackgroundColor(pat, afterBgColor);
+        });
+      } else {
+        fc.setBackgroundColor(sec.bg || '#ffffff', afterBgColor);
+      }
+    };
+
+    // Load objects, ensure web fonts are ready, then apply background.
+    const afterLoad = () => {
+      const fontLoads = [];
+      fc.getObjects().forEach(obj => {
+        if ((obj.type === 'textbox' || obj.type === 'i-text') && obj.fontFamily && GOOGLE_FONTS.has(obj.fontFamily)) {
+          ['400', '700', 'italic 400'].forEach(v =>
+            fontLoads.push(document.fonts.load(`${v} 16px "${obj.fontFamily}"`).catch(() => {}))
+          );
+        }
+      });
+      Promise.all(fontLoads).then(() => {
+        fc.getObjects().forEach(obj => {
+          if (obj.type === 'textbox' || obj.type === 'i-text') { obj.dirty = true; obj.initDimensions(); }
+        });
+        applyBg();
+      });
+    };
+
+    if (sec.objects && sec.objects.length) {
+      fc.loadFromJSON({ version: '5.3.0', objects: sec.objects }, afterLoad);
+    } else {
+      afterLoad();
+    }
+  });
+}
+
+async function exportPrint() {
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
+  const destDir = await window.editorAPI.exportDir();
+  if (!destDir) return;
+
+  const sanitize = s => (s || 'section').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '');
+  const total = sections.length;
+  const imageFiles = [];
+
+  for (let i = 0; i < total; i++) {
+    const sec = sections[i];
+    setStatus(`Rendering section ${i + 1}/${total}…`);
+    const dataUrl = await renderSectionToDataUrl(sec, 2);
+    imageFiles.push({
+      name: String(i + 1).padStart(2, '0') + '-' + sanitize(sec.label) + '.png',
+      dataUrl,
+    });
+  }
+
+  await window.editorAPI.savePrintImages(destDir, imageFiles);
+  setStatus(`Print images saved (${total} PNG${total !== 1 ? 's' : ''}) → ${destDir}`);
+}
+
 /* Fabric stores left/top at the object's originX/originY point.
    CSS position:absolute always needs the top-left corner. */
 function fabricLeft(o) {
@@ -1314,17 +1472,29 @@ function fabricTop(o) {
   return Math.round(o.top);
 }
 
-function buildTransform(angle, scaleX) {
+/* CSS transform-origin must match Fabric's rotation pivot (the origin point).
+   fabricLeft/Top shift the element to its top-left corner, so the origin
+   point is at offset (originX%, originY%) within that positioned element. */
+function originToCSSTransformOrigin(ox, oy) {
+  const x = ox === 'center' ? '50%' : ox === 'right' ? '100%' : '0%';
+  const y = oy === 'center' ? '50%' : oy === 'bottom' ? '100%' : '0%';
+  return `${x} ${y}`;
+}
+
+function buildTransform(angle, scaleX, ox, oy) {
   const parts = [];
   if (angle) parts.push(`rotate(${angle}deg)`);
   if (Math.abs((scaleX || 1) - 1) > 0.01) parts.push(`scaleX(${(scaleX).toFixed(3)})`);
-  return parts.length ? `transform:${parts.join(' ')};transform-origin:top left;` : '';
+  if (!parts.length) return '';
+  const to = originToCSSTransformOrigin(ox || 'left', oy || 'top');
+  return `transform:${parts.join(' ')};transform-origin:${to};`;
 }
 
-function objectToHTML(o, sec, usedFonts, images, seenNames) {
+function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap) {
   const pxL = fabricLeft(o) + 'px';
   const pxT = fabricTop(o)  + 'px';
-  const rotateCss = o.angle  ? `transform:rotate(${o.angle}deg);transform-origin:top left;` : '';
+  const to  = originToCSSTransformOrigin(o.originX || 'left', o.originY || 'top');
+  const rotateCss = o.angle  ? `transform:rotate(${o.angle}deg);transform-origin:${to};` : '';
   const opacity   = (o.opacity != null && o.opacity < 1) ? `opacity:${o.opacity.toFixed(2)};` : '';
 
   if (o.type === 'i-text' || o.type === 'textbox') {
@@ -1340,7 +1510,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames) {
     const lh  = (o.lineHeight || 1.16).toFixed(2);
     const w   = Math.round((o.width || 200) * sx);
     const ws  = (o.type === 'textbox') ? 'pre-wrap' : 'pre';
-    const txf = buildTransform(o.angle, sx);
+    const txf = buildTransform(o.angle, sx, o.originX, o.originY);
     const tsh = shadowToCSS(o.shadow);
     usedFonts.add(ff);
     return `    <p style="position:absolute;left:${pxL};top:${pxT};width:${w}px;` +
@@ -1351,12 +1521,19 @@ function objectToHTML(o, sec, usedFonts, images, seenNames) {
   }
 
   if (o.type === 'image') {
-    const name   = collectImage(o.src || '', seenNames, images);
-    const w      = Math.round((o.width  || 100) * (o.scaleX || 1));
-    const h      = Math.round((o.height || 100) * (o.scaleY || 1));
-    const border = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
+    const w        = Math.round((o.width  || 100) * (o.scaleX || 1));
+    const h        = Math.round((o.height || 100) * (o.scaleY || 1));
+    const border   = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
+    const gsCss    = o._grayscale ? 'filter:grayscale(100%);' : '';
+    if (dataUrlMap) {
+      const src = o.src || '';
+      const imgSrc = src.startsWith('asset://') ? (dataUrlMap.get(assetName(src)) || '') : src;
+      return `    <img src="${imgSrc}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
+        `width:${w}px;height:${h}px;${border}${gsCss}${rotateCss}${opacity}">`;
+    }
+    const name = collectImage(o.src || '', seenNames, images);
     return `    <img src="images/${name}" alt="" loading="lazy" draggable="false" style="position:absolute;left:${pxL};top:${pxT};` +
-      `width:${w}px;height:${h}px;${border}${rotateCss}${opacity}">` +
+      `width:${w}px;height:${h}px;${border}${gsCss}${rotateCss}${opacity}">` +
       `\n    <div style="position:absolute;left:${pxL};top:${pxT};width:${w}px;height:${h}px;z-index:1;"></div>`;
   }
 
@@ -1461,7 +1638,7 @@ ${fontsLink}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;padding:40px 16px;font-family:sans-serif}
 .preview-label{color:#777;font-size:11px;margin-bottom:14px;letter-spacing:0.08em;text-transform:uppercase}
-.phone-frame{width:406px;border-radius:48px;border:8px solid #444;background:#000;box-shadow:0 0 0 1px #555,0 32px 80px rgba(0,0,0,0.7);overflow:hidden}
+.phone-frame{width:406px;border-radius:24px;border:8px solid #444;background:#000;box-shadow:0 0 0 1px #555,0 32px 80px rgba(0,0,0,0.7);overflow:hidden}
 .phone-screen{overflow:hidden;position:relative;height:${scaledH}px}
 .phone-content{transform-origin:top left;transform:scale(${scale.toFixed(4)});width:${CANVAS_W}px;position:absolute;top:0;left:0}
 .bs{position:relative;overflow:hidden;margin-bottom:12px}
@@ -1554,18 +1731,19 @@ function insertTextAtCursor(obj, text) {
 // When a text object is manually resized by dragging handles, Fabric stores the
 // change as scaleX/scaleY rather than updated width/fontSize. Normalise those
 // back to real measurements so further edits and word-wrap stay predictable.
-// Snap an object's left/top so they land on integer physical pixels.
-// At Windows 125 % scaling (DPR=1.25) an object at left=84.3 maps to
-// buffer pixel 105.375 — non-integer → blurry text edges.  After snapping:
-// left = Math.round(84.3 * 1.25) / 1.25 = 84.8, buffer pixel = 106. ✓
+// Snap an object's left/top to integer CSS pixels so the canvas position
+// matches fabricLeft/Top (which also uses Math.round).  DPR-based snapping
+// produced non-integer CSS values at DPR≠1 (e.g. -18.5 at DPR=2) that
+// fabricLeft then rounded to a different integer (-18 vs -19), causing a
+// visible 1-pixel misalignment between the canvas and the HTML preview.
 function snapObjToPixel(obj) {
   if (!obj) return;
-  const dpr = window.devicePixelRatio || 1;
-  const sl  = Math.round(obj.left * dpr) / dpr;
-  const st  = Math.round(obj.top  * dpr) / dpr;
+  const sl = Math.round(obj.left);
+  const st = Math.round(obj.top);
   if (sl !== obj.left || st !== obj.top) {
     obj.set({ left: sl, top: st });
     obj.setCoords();
+    canvas.requestRenderAll();
   }
 }
 
@@ -1658,7 +1836,8 @@ function bindMenuEvents() {
   api.onMenu('menu:open',      () => openProject());
   api.onMenu('menu:save',      () => saveProject(false));
   api.onMenu('menu:save-as',   () => saveProject(true));
-  api.onMenu('menu:export',    () => exportHTML());
+  api.onMenu('menu:export',       () => exportHTML());
+  api.onMenu('menu:export-print', () => exportPrint());
   api.onMenu('menu:undo',      () => undo());
   api.onMenu('menu:redo',      () => redo());
   api.onMenu('menu:delete',    () => deleteSelected());

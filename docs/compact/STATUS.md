@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-25
+**Last updated**: 2026-05-26
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -41,6 +41,10 @@
 - 2026-05-22 Editor: export HTML self-contained — main process streams base64 substitution via WriteStream; works when opened via file:// on mobile; no V8 string limit hit; D-035, D-036
 - 2026-05-24 Editor: export changed to GitHub Pages folder format — writes index.html + images/ to chosen directory; folder picker replaces single-file save dialog; D-037
 - 2026-05-24 Brochure published to GitHub Pages — lazy loading, mobile download protection (overlay divs + touch-callout), PNG resize to 900px via nativeImage, will-change + content-visibility for smooth scroll/zoom; D-038, D-039
+- 2026-05-26 Editor: phone-frame border-radius 48px→24px in preview — border images at left edge of cover/last page no longer clipped by overflow:hidden corner rounding
+- 2026-05-26 Editor: section content corruption fixed — _sectionGen + _sectionLoading guard prevents snapshotCurrentSection capturing empty canvas during async loadFromJSON; stale bgImage callbacks also guarded
+- 2026-05-26 Editor: undo removes background fixed — restoreHistory re-applies applyCanvasBg + bgImage reload after loadFromJSON (Fabric's internal canvas.clear() was erasing background)
+- 2026-05-26 Editor: pushHistory now uses CANVAS_JSON_PROPS — undo/redo preserves _grayscale, _shadowPreset, _shadowColor etc.
 
 ## In progress
 
