@@ -129,7 +129,8 @@ function buildMenu() {
         { label: 'Save',         accelerator: 'CmdOrCtrl+S', click: () => mainWindow.webContents.send('menu:save') },
         { label: 'Save As…',     accelerator: 'CmdOrCtrl+Shift+S', click: saveProjectAs },
         { type: 'separator' },
-        { label: 'Export to HTML/CSS…', accelerator: 'CmdOrCtrl+E', click: () => mainWindow.webContents.send('menu:export') },
+        { label: 'Export to HTML/CSS…', accelerator: 'CmdOrCtrl+E',       click: () => mainWindow.webContents.send('menu:export') },
+        { label: 'Export for Print…',  accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow.webContents.send('menu:export-print') },
         { type: 'separator' },
         { role: 'quit' },
       ],
@@ -228,6 +229,16 @@ ipcMain.handle('dialog:exportDir', async () => {
     buttonLabel: 'Export here',
   });
   return canceled ? null : filePaths[0];
+});
+
+// Save rendered section images (PNG data URLs) to a folder.
+ipcMain.handle('export:savePrintImages', async (_e, dir, images) => {
+  fs.mkdirSync(dir, { recursive: true });
+  for (const { name, dataUrl } of (images || [])) {
+    const b64 = (dataUrl || '').split(',')[1];
+    if (b64) fs.writeFileSync(path.join(dir, name), Buffer.from(b64, 'base64'));
+  }
+  return true;
 });
 
 ipcMain.handle('fs:readFile', async (_e, filePath) => {
