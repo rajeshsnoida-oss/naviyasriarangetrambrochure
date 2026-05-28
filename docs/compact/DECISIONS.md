@@ -1,5 +1,23 @@
 # Decisions
 
+## D-040 — Print export multiplier derived from target DPI and page width
+
+- **Date:** 2026-05-27
+- **Status:** decided
+- **Context:** The original `exportPrint()` used `multiplier=2`, producing ~181 DPI
+  at 8.75in wide — below the 300 DPI minimum for commercial print. Iterating on
+  print dimensions also required manually recalculating target pixel counts each time.
+- **Decision:** Replace the hardcoded multiplier with
+  `(PRINT_DPI × PRINT_W_IN) / CANVAS_W`. Current spec: 8.50 × 11.22in at 300 DPI
+  → 2550 × 3366px per image. `PRINT_W_IN` is the single source of truth; changing
+  it automatically yields the correct pixel width at 300 DPI.
+- **Why:** A dimension-derived multiplier keeps the print spec in one place and
+  eliminates manual pixel arithmetic when the page size changes.
+- **Consequences:** Section height in the editor must be set manually to match the
+  target page height (`CANVAS_W × h_in / w_in`; currently 1048px for 11.22in).
+  Exported PNGs carry no DPI metadata (pHYs chunk) — print shops must be told the
+  intended print dimensions separately.
+
 ## D-039 — Transparent overlay divs to block mobile long-press image save
 
 - **Date:** 2026-05-24

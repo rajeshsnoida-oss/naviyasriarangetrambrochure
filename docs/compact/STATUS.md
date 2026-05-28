@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-26
+**Last updated**: 2026-05-27
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -45,6 +45,7 @@
 - 2026-05-26 Editor: section content corruption fixed — _sectionGen + _sectionLoading guard prevents snapshotCurrentSection capturing empty canvas during async loadFromJSON; stale bgImage callbacks also guarded
 - 2026-05-26 Editor: undo removes background fixed — restoreHistory re-applies applyCanvasBg + bgImage reload after loadFromJSON (Fabric's internal canvas.clear() was erasing background)
 - 2026-05-26 Editor: pushHistory now uses CANVAS_JSON_PROPS — undo/redo preserves _grayscale, _shadowPreset, _shadowColor etc.
+- 2026-05-27 Editor: print export upgraded to 300 DPI — multiplier calculated from PRINT_W_IN/CANVAS_W; PNG-only output (no HTML wrapper); settled on 8.50×11.22in → 2550×3366px per image; set sections to 1048px tall for exact height fit
 
 ## In progress
 

@@ -1437,14 +1437,20 @@ async function exportPrint() {
   const destDir = await window.editorAPI.exportDir();
   if (!destDir) return;
 
+  // Target: 300 DPI at 8.50 × 11.22in → 2550 × 3366px per image.
+  // multiplier scales the 794px design canvas to the print pixel count.
+  const PRINT_DPI  = 300;
+  const PRINT_W_IN = 8.50;
+  const multiplier = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 2550 / 794 ≈ 3.211
+
   const sanitize = s => (s || 'section').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '');
   const total = sections.length;
   const imageFiles = [];
 
   for (let i = 0; i < total; i++) {
     const sec = sections[i];
-    setStatus(`Rendering section ${i + 1}/${total}…`);
-    const dataUrl = await renderSectionToDataUrl(sec, 2);
+    setStatus(`Rendering section ${i + 1}/${total} at ${PRINT_DPI} DPI…`);
+    const dataUrl = await renderSectionToDataUrl(sec, multiplier);
     imageFiles.push({
       name: String(i + 1).padStart(2, '0') + '-' + sanitize(sec.label) + '.png',
       dataUrl,
@@ -1452,7 +1458,7 @@ async function exportPrint() {
   }
 
   await window.editorAPI.savePrintImages(destDir, imageFiles);
-  setStatus(`Print images saved (${total} PNG${total !== 1 ? 's' : ''}) → ${destDir}`);
+  setStatus(`Print export: ${total} PNG${total !== 1 ? 's' : ''} at ${PRINT_DPI} DPI (2625px wide) → ${destDir}`);
 }
 
 /* Fabric stores left/top at the object's originX/originY point.
