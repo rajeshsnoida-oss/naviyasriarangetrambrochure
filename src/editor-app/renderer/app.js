@@ -359,6 +359,7 @@ function applyCanvasBg(sec) {
 /* ── Switch active section ──────────────────────────────────────────────── */
 function switchSection(idx) {
   if (idx === activeSec) return;
+  clearTimeout(_recoveryTimer); // cancel pending recovery save before navigating away
   snapshotCurrentSection();
   activeSec = idx;
   const sec = sections[idx];
@@ -389,6 +390,7 @@ function switchSection(idx) {
       ['400', '700', 'italic 400'].forEach(v => fontLoads.push(document.fonts.load(`${v} 16px "${ff}"`).catch(() => {})));
     });
     Promise.all(fontLoads).then(() => {
+      if (gen !== _sectionGen) return; // stale: user already navigated to a different section
       canvas.getObjects().forEach(obj => {
         if (obj.type === 'textbox' || obj.type === 'i-text') {
           obj.dirty = true;
@@ -405,8 +407,8 @@ function switchSection(idx) {
   if (sec.objects && sec.objects.length) {
     _sectionLoading = true;
     canvas.loadFromJSON({ version: '5.3.0', objects: sec.objects }, () => {
+      if (gen !== _sectionGen) return; // stale: another switchSection ran; do NOT clear _sectionLoading
       _sectionLoading = false;
-      if (gen !== _sectionGen) return; // stale: another switchSection already ran
       // Snap every loaded object to integer CSS-pixel coordinates so the
       // canvas position matches the HTML preview (fabricLeft/Top also uses
       // Math.round).  Fractional left/top from zoom>1 drags also cause
@@ -429,6 +431,7 @@ function switchSection(idx) {
 
 function saveCurrentSectionObjects() {
   if (activeSec < 0 || activeSec >= sections.length) return;
+  if (_sectionLoading) return; // don't overwrite section data while loadFromJSON is in flight
   sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
 }
 
