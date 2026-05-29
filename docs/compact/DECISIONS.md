@@ -1,5 +1,50 @@
 # Decisions
 
+## D-042 — transform-origin: 50% 50% hardcoded for all CSS rotation/flip
+
+- **Date:** 2026-05-29
+- **Status:** decided
+- **Context:** `objectToHTML` mapped Fabric's `originX`/`originY` to CSS
+  `transform-origin` via `originToCSSTransformOrigin()`. For the common case
+  `originX='left'`, this produced `transform-origin: 0% 0%` (top-left corner),
+  causing rotated or flipped images to appear visually misplaced — e.g. a
+  `scaleX(-1)` flip mirrored around the left edge, moving the image off-screen.
+- **Decision:** Remove `originToCSSTransformOrigin()`. Hardcode
+  `transform-origin: 50% 50%` for all CSS rotation and flip transforms in
+  `objectToHTML` and `buildTransform`.
+- **Why:** Fabric.js v5 always rotates and flips around the object's geometric
+  centre regardless of `originX`/`originY`. Those properties only affect how
+  `left`/`top` is interpreted (the anchor for positioning). `fabricLeft()`/
+  `fabricTop()` already account for origin when computing the CSS top-left corner,
+  so `transform-origin: 50% 50%` correctly places the CSS pivot at the object's
+  visual centre — matching Fabric's behaviour exactly.
+- **Consequences:** Any future transform type added to `objectToHTML` must also
+  use `transform-origin: 50% 50%`. `originX`/`originY` remain relevant only to
+  the `fabricLeft()`/`fabricTop()` position helpers, never to CSS transform-origin.
+
+## D-041 — CMYK PDF via raw XObject + pngjs RGBA→DeviceCMYK
+
+- **Date:** 2026-05-29
+- **Status:** decided
+- **Context:** Print shops require CMYK PDFs. pdfkit's built-in `.image()` embeds
+  images as DeviceRGB — handing that to a print shop forces a conversion with
+  potential colour shift. A true CMYK PDF was needed without native binary
+  dependencies (no Sharp, ImageMagick, or Ghostscript).
+- **Decision:** In the `export:toPdf` IPC handler: decode each rendered PNG via
+  `pngjs.PNG.sync.read()`, convert every pixel RGBA→DeviceCMYK with the standard
+  ink formula (k = 1 − max(r,g,b)), compress the raw CMYK buffer with
+  `zlib.deflateSync()`, then embed via `doc.ref()` as a raw PDF XObject with
+  `ColorSpace: DeviceCMYK` and `Filter: FlateDecode`, bypassing pdfkit's
+  public image API entirely.
+- **Why:** pdfkit's public API does not expose a ColorSpace override for raw image
+  embedding. Using `doc.ref()` / `doc.page.resources.data.XObject` directly lets
+  us emit a true DeviceCMYK stream while keeping dependencies to pure-JS packages
+  already in package.json (pdfkit, pngjs).
+- **Consequences:** The `doc.ref()` / XObject resource API is pdfkit-internal and
+  may break on a major pdfkit version bump. The RGB→CMYK formula is naive (no ICC
+  profile, no perceptual rendering intent) — colours are predictable but may shift
+  slightly from screen. Alpha channel is discarded (canvas renders flat; acceptable).
+
 ## D-040 — Print export multiplier derived from target DPI and page width
 
 - **Date:** 2026-05-27

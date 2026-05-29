@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-27
+**Last updated**: 2026-05-29
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -46,14 +46,20 @@
 - 2026-05-26 Editor: undo removes background fixed — restoreHistory re-applies applyCanvasBg + bgImage reload after loadFromJSON (Fabric's internal canvas.clear() was erasing background)
 - 2026-05-26 Editor: pushHistory now uses CANVAS_JSON_PROPS — undo/redo preserves _grayscale, _shadowPreset, _shadowColor etc.
 - 2026-05-27 Editor: print export upgraded to 300 DPI — multiplier calculated from PRINT_W_IN/CANVAS_W; PNG-only output (no HTML wrapper); settled on 8.50×11.22in → 2550×3366px per image; set sections to 1048px tall for exact height fit
+- 2026-05-29 Editor: print spec corrected to 6.00×8.50in portrait (was 8.50×11.22in); PRINT_MULTIPLIER updated (2.267×); _renderAllSections shared render helper extracted; section height should be 1124px for exact 6×8.5 proportions
+- 2026-05-29 Editor: CMYK PDF export — export:toPdf IPC handler (pngjs decode, RGBA→DeviceCMYK, zlib FlateDecode, raw XObject in pdfkit); Export PDF button + Ctrl+Shift+D menu shortcut
+- 2026-05-29 Editor: transform-origin bug fixed — removed originToCSSTransformOrigin (Fabric always rotates/flips around geometric CENTER regardless of originX/Y); all CSS transforms now hardcode 50% 50%; flipX/flipY CSS scaleX(-1)/scaleY(-1) added
+- 2026-05-29 Editor: preview lazyLoad fixed — objectToHTML lazyLoad param (true=export, false=preview); avoids images never loading inside CSS-scaled phone preview; stroke guard for cutout images (no spurious 1px border)
 
 ## In progress
 
-*(empty)*
+- Investigate image resize ratio in preview — code math verified correct; awaiting user comparison test to rule out perception issue (canvas zoom vs phone scale)
 
 ## Next
 
 - **Use the editor**: double-click `src\editor-app\start.bat`
+- Set canvas section height to 1124px for exact 6×8.5in print proportions (previously 1048px for old spec)
+- Test CMYK PDF export — open in Adobe Acrobat Preflight to verify DeviceCMYK colorspace is present
 - If image quality looks soft on high-DPI phones, raise MAX_W 900→1350 in src/editor-app/main.js, re-export and push
 - `/switch-phase development feedback` — implement feedback module (Google Apps Script integration; highest risk)
 - Provide border image assets: assets/images/border-kolam.png and assets/images/border-bottom.png (seamless horizontal tile, ≤96px tall, transparent PNG)

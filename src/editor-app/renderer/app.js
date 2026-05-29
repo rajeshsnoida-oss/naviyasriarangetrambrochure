@@ -792,6 +792,7 @@ function bindToolbar() {
   document.getElementById('btn-preview').addEventListener('click',      previewHTML);
   document.getElementById('btn-export').addEventListener('click',       exportHTML);
   document.getElementById('btn-export-print').addEventListener('click', exportPrint);
+  document.getElementById('btn-export-pdf').addEventListener('click',   exportPDF);
 }
 
 function applyText(prop, val) {
@@ -1431,34 +1432,46 @@ function renderSectionToDataUrl(sec, multiplier) {
   });
 }
 
-async function exportPrint() {
+// Shared render helper — renders all sections to PNG data URLs at print DPI.
+// Target spec: 6.00 × 8.50 in @ 300 DPI → 1800 × 2550px per section.
+// Set canvas section height to 1124px for exact 6×8.5 proportions.
+const PRINT_DPI  = 300;
+const PRINT_W_IN = 6.00;
+const PRINT_H_IN = 8.50;
+const PRINT_MULTIPLIER = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 1800 / 794 ≈ 2.267
+
+async function _renderAllSections(onProgress) {
   clearTimeout(_recoveryTimer);
   snapshotCurrentSection();
-  const destDir = await window.editorAPI.exportDir();
-  if (!destDir) return;
-
-  // Target: 300 DPI at 8.50 × 11.22in → 2550 × 3366px per image.
-  // multiplier scales the 794px design canvas to the print pixel count.
-  const PRINT_DPI  = 300;
-  const PRINT_W_IN = 8.50;
-  const multiplier = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 2550 / 794 ≈ 3.211
-
   const sanitize = s => (s || 'section').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '');
   const total = sections.length;
-  const imageFiles = [];
-
+  const files = [];
   for (let i = 0; i < total; i++) {
-    const sec = sections[i];
-    setStatus(`Rendering section ${i + 1}/${total} at ${PRINT_DPI} DPI…`);
-    const dataUrl = await renderSectionToDataUrl(sec, multiplier);
-    imageFiles.push({
-      name: String(i + 1).padStart(2, '0') + '-' + sanitize(sec.label) + '.png',
-      dataUrl,
-    });
+    onProgress(i + 1, total);
+    const dataUrl = await renderSectionToDataUrl(sections[i], PRINT_MULTIPLIER);
+    files.push({ name: String(i + 1).padStart(2, '0') + '-' + sanitize(sections[i].label), dataUrl });
   }
+  return files;
+}
 
+async function exportPrint() {
+  const destDir = await window.editorAPI.exportDir();
+  if (!destDir) return;
+  const files = await _renderAllSections((n, t) => setStatus(`Rendering section ${n}/${t} at ${PRINT_DPI} DPI…`));
+  const imageFiles = files.map(f => ({ name: f.name + '.png', dataUrl: f.dataUrl }));
   await window.editorAPI.savePrintImages(destDir, imageFiles);
-  setStatus(`Print export: ${total} PNG${total !== 1 ? 's' : ''} at ${PRINT_DPI} DPI (2625px wide) → ${destDir}`);
+  setStatus(`PNG export: ${imageFiles.length} images @ ${PRINT_DPI} DPI (2550×1800px) → ${destDir}`);
+}
+
+async function exportPDF() {
+  const destDir = await window.editorAPI.exportDir();
+  if (!destDir) return;
+  const files = await _renderAllSections((n, t) => setStatus(`Rendering section ${n}/${t} for CMYK PDF…`));
+  setStatus(`Assembling CMYK PDF…`);
+  const destPath = await window.editorAPI.exportToPdf(
+    destDir, files, { wIn: PRINT_W_IN, hIn: PRINT_H_IN, dpi: PRINT_DPI }
+  );
+  setStatus(`PDF export: ${files.length} page${files.length !== 1 ? 's' : ''}, CMYK @ ${PRINT_DPI} DPI → ${destPath}`);
 }
 
 /* Fabric stores left/top at the object's originX/originY point.
@@ -1481,26 +1494,25 @@ function fabricTop(o) {
 /* CSS transform-origin must match Fabric's rotation pivot (the origin point).
    fabricLeft/Top shift the element to its top-left corner, so the origin
    point is at offset (originX%, originY%) within that positioned element. */
-function originToCSSTransformOrigin(ox, oy) {
-  const x = ox === 'center' ? '50%' : ox === 'right' ? '100%' : '0%';
-  const y = oy === 'center' ? '50%' : oy === 'bottom' ? '100%' : '0%';
-  return `${x} ${y}`;
-}
-
-function buildTransform(angle, scaleX, ox, oy) {
+function buildTransform(angle, scaleX) {
   const parts = [];
   if (angle) parts.push(`rotate(${angle}deg)`);
   if (Math.abs((scaleX || 1) - 1) > 0.01) parts.push(`scaleX(${(scaleX).toFixed(3)})`);
   if (!parts.length) return '';
-  const to = originToCSSTransformOrigin(ox || 'left', oy || 'top');
-  return `transform:${parts.join(' ')};transform-origin:${to};`;
+  // Fabric always rotates/scales around the object's CENTER, regardless of originX/Y.
+  // CSS transform-origin:50% 50% matches this (it's also the CSS default).
+  return `transform:${parts.join(' ')};transform-origin:50% 50%;`;
 }
 
-function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap) {
+// lazyLoad=true for export (bandwidth savings); false for preview (CSS transform
+// scale causes the browser to evaluate lazy-load intersection in layout space,
+// so images in the lower portion of a scaled section never trigger a load).
+function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap, lazyLoad = true) {
   const pxL = fabricLeft(o) + 'px';
   const pxT = fabricTop(o)  + 'px';
-  const to  = originToCSSTransformOrigin(o.originX || 'left', o.originY || 'top');
-  const rotateCss = o.angle  ? `transform:rotate(${o.angle}deg);transform-origin:${to};` : '';
+  // Fabric always rotates/flips around the object CENTER regardless of originX/Y,
+  // so CSS transform-origin must always be 50% 50% (the CSS default anyway).
+  const rotateCss = o.angle  ? `transform:rotate(${o.angle}deg);transform-origin:50% 50%;` : '';
   const opacity   = (o.opacity != null && o.opacity < 1) ? `opacity:${o.opacity.toFixed(2)};` : '';
 
   if (o.type === 'i-text' || o.type === 'textbox') {
@@ -1516,7 +1528,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap) {
     const lh  = (o.lineHeight || 1.16).toFixed(2);
     const w   = Math.round((o.width || 200) * sx);
     const ws  = (o.type === 'textbox') ? 'pre-wrap' : 'pre';
-    const txf = buildTransform(o.angle, sx, o.originX, o.originY);
+    const txf = buildTransform(o.angle, sx);
     const tsh = shadowToCSS(o.shadow);
     usedFonts.add(ff);
     return `    <p style="position:absolute;left:${pxL};top:${pxT};width:${w}px;` +
@@ -1527,19 +1539,32 @@ function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap) {
   }
 
   if (o.type === 'image') {
-    const w        = Math.round((o.width  || 100) * (o.scaleX || 1));
-    const h        = Math.round((o.height || 100) * (o.scaleY || 1));
-    const border   = (o.strokeWidth > 0) ? `border:${o.strokeWidth}px solid ${safeColor(o.stroke,'#000')};` : '';
-    const gsCss    = o._grayscale ? 'filter:grayscale(100%);' : '';
+    const w = Math.round((o.width  || 100) * (o.scaleX || 1));
+    const h = Math.round((o.height || 100) * (o.scaleY || 1));
+    // Only emit a CSS border when both strokeWidth > 0 AND stroke is a real colour.
+    // Fabric skips drawing a stroke when stroke is null/'' regardless of strokeWidth,
+    // so matching that behaviour prevents a spurious 1px black frame on cutout images
+    // (which inherit Fabric's default strokeWidth:1 but have stroke:null).
+    const hasStroke = o.strokeWidth > 0 && o.stroke && o.stroke !== '' && o.stroke !== 'transparent';
+    const border    = hasStroke ? `border:${o.strokeWidth}px solid ${o.stroke};` : '';
+    const gsCss     = o._grayscale ? 'filter:grayscale(100%);' : '';
+    // Fabric flipX/flipY — reflect via CSS transform so the image matches the canvas.
+    const flipParts = [];
+    if (o.flipX) flipParts.push('scaleX(-1)');
+    if (o.flipY) flipParts.push('scaleY(-1)');
+    const flipCss = flipParts.length
+      ? `transform:${(o.angle ? `rotate(${o.angle}deg) ` : '') + flipParts.join(' ')};transform-origin:50% 50%;`
+      : rotateCss;
     if (dataUrlMap) {
       const src = o.src || '';
       const imgSrc = src.startsWith('asset://') ? (dataUrlMap.get(assetName(src)) || '') : src;
       return `    <img src="${imgSrc}" alt="" style="position:absolute;left:${pxL};top:${pxT};` +
-        `width:${w}px;height:${h}px;${border}${gsCss}${rotateCss}${opacity}">`;
+        `width:${w}px;height:${h}px;${border}${gsCss}${flipCss}${opacity}">`;
     }
-    const name = collectImage(o.src || '', seenNames, images);
-    return `    <img src="images/${name}" alt="" loading="lazy" draggable="false" style="position:absolute;left:${pxL};top:${pxT};` +
-      `width:${w}px;height:${h}px;${border}${gsCss}${rotateCss}${opacity}">` +
+    const name   = collectImage(o.src || '', seenNames, images);
+    const loading = lazyLoad ? ' loading="lazy"' : '';
+    return `    <img src="images/${name}" alt=""${loading} draggable="false" style="position:absolute;left:${pxL};top:${pxT};` +
+      `width:${w}px;height:${h}px;${border}${gsCss}${flipCss}${opacity}">` +
       `\n    <div style="position:absolute;left:${pxL};top:${pxT};width:${w}px;height:${h}px;z-index:1;"></div>`;
   }
 
@@ -1618,7 +1643,7 @@ async function previewHTML() {
 
     const sectionsHTML = sections.map(sec => {
       const bgStyle  = buildBgStyleForFolder(sec, seenNames, images);
-      const objsHtml = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames)).join('\n');
+      const objsHtml = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames, undefined, false)).join('\n');
       return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;">\n${objsHtml}\n  </section>`;
     }).join('\n\n');
 
@@ -1844,6 +1869,7 @@ function bindMenuEvents() {
   api.onMenu('menu:save-as',   () => saveProject(true));
   api.onMenu('menu:export',       () => exportHTML());
   api.onMenu('menu:export-print', () => exportPrint());
+  api.onMenu('menu:export-pdf',   () => exportPDF());
   api.onMenu('menu:undo',      () => undo());
   api.onMenu('menu:redo',      () => redo());
   api.onMenu('menu:delete',    () => deleteSelected());
