@@ -1,5 +1,52 @@
 # Decisions
 
+## D-044 — switchSection race: gen-tagged reviver + surgical stale-object removal
+
+- **Date:** 2026-05-29
+- **Status:** decided
+- **Context:** If the user navigates A→B→A quickly, two loadFromJSON calls can be in-flight
+  simultaneously. Fabric's internal __setupCanvas adds enlivened objects to the canvas
+  *before* the user callback fires, so the stale load's objects appear on the canvas briefly
+  (or permanently if the gen check simply returns without cleanup).
+- **Decision:** Pass a reviver function to loadFromJSON that tags each enlivened object with
+  `fabricObj.__loadGen = myGen` (the gen counter captured at load start). The stale callback
+  check `if (gen !== _sectionGen)` now removes only objects tagged with its own myGen via
+  `canvas.remove(...canvas.getObjects().filter(o => o.__loadGen === myGen))`, then returns
+  without clearing _sectionLoading (the current load is responsible for that).
+- **Why:** Alternative of calling canvas.clear() in the stale callback would race with the
+  current load's __setupCanvas pass, potentially removing objects that belong to the now-
+  current section. Surgical removal by gen-tag targets only the stale load's objects. The
+  __loadGen property is transient (not in CANVAS_JSON_PROPS) so it doesn't pollute saved JSON.
+- **Consequences:** Any future change to loadFromJSON usage must continue to pass a reviver
+  that sets __loadGen, or the stale-cleanup guard will silently stop working (it will remove
+  zero objects instead of failing noisily). The _sectionLoading flag must not be cleared in
+  the stale branch — the current load owns that flag.
+
+## D-043 — snapshotCurrentSection: discard ActiveSelection without restoring it
+
+- **Date:** 2026-05-29
+- **Status:** decided
+- **Context:** snapshotCurrentSection handled multi-select by calling discardActiveObject()
+  (to convert group-relative coords to absolute for correct toJSON output), then restoring
+  the selection via `new fabric.ActiveSelection(members, { canvas })`. Each restore round-trips
+  absolute → group-relative → absolute through Fabric's qrDecompose matrix decomposition,
+  introducing floating-point error of ~3-4px per call. Because Ctrl+S and section-switch
+  both call snapshotCurrentSection, navigating away and back while objects were multi-selected
+  caused cumulative visible drift (visible after 2-3 round trips).
+- **Decision:** Remove the re-group step entirely. snapshotCurrentSection calls
+  discardActiveObject() unconditionally when an activeSelection is present, serialises with
+  toJSON(), and does not recreate the ActiveSelection. Multi-selection is cleared as a side
+  effect of every save.
+- **Why:** The qrDecompose drift compounds with each round-trip and has no practical fix
+  short of avoiding the round-trip altogether. Alternatives considered: (1) snap
+  group-relative coords to integers before re-grouping — too fragile, doesn't eliminate
+  the decomposition step; (2) avoid discardActiveObject and read member absolute coords
+  directly — Fabric exposes no stable API for this in v5. The UX cost (multi-selection
+  cleared on save) is acceptable; re-selecting is a one-gesture operation.
+- **Consequences:** Users lose their multi-selection after any save or section-switch. This
+  is the intended behaviour going forward. Any future refactor that restores the selection
+  must avoid round-tripping through ActiveSelection's coord conversion.
+
 ## D-042 — transform-origin: 50% 50% hardcoded for all CSS rotation/flip
 
 - **Date:** 2026-05-29

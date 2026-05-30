@@ -50,6 +50,7 @@
 - 2026-05-29 Editor: CMYK PDF export — export:toPdf IPC handler (pngjs decode, RGBA→DeviceCMYK, zlib FlateDecode, raw XObject in pdfkit); Export PDF button + Ctrl+Shift+D menu shortcut
 - 2026-05-29 Editor: transform-origin bug fixed — removed originToCSSTransformOrigin (Fabric always rotates/flips around geometric CENTER regardless of originX/Y); all CSS transforms now hardcode 50% 50%; flipX/flipY CSS scaleX(-1)/scaleY(-1) added
 - 2026-05-29 Editor: preview lazyLoad fixed — objectToHTML lazyLoad param (true=export, false=preview); avoids images never loading inside CSS-scaled phone preview; stroke guard for cutout images (no spurious 1px border)
+- 2026-05-29 Editor: image position drift fixed — snapshotCurrentSection no longer recreates ActiveSelection after toJSON (qrDecompose round-trip was compounding 3-4px float error per navigation); switchSection race condition fixed via __loadGen reviver tag + targeted stale-object removal; D-043, D-044
 
 ## In progress
 

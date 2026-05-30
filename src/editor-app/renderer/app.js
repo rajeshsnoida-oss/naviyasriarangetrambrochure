@@ -366,6 +366,8 @@ function switchSection(idx) {
   const gen = ++_sectionGen; // any prior async callbacks with a stale gen will self-abort
 
   canvas.setHeight(Math.round(sec.height * zoom));
+  const _host = document.getElementById('canvas-host');
+  if (_host) { _host.scrollTop = 0; _host.scrollLeft = 0; }
 
   // loadFromJSON clears backgroundColor — applyCanvasBg must run AFTER it completes.
   const afterLoad = () => {
@@ -406,17 +408,24 @@ function switchSection(idx) {
   canvas.remove(...canvas.getObjects());
   if (sec.objects && sec.objects.length) {
     _sectionLoading = true;
+    const myGen = gen;
     canvas.loadFromJSON({ version: '5.3.0', objects: sec.objects }, () => {
-      if (gen !== _sectionGen) return; // stale: another switchSection ran; do NOT clear _sectionLoading
+      if (gen !== _sectionGen) {
+        // Stale load: Fabric's __setupCanvas already added our objects to the canvas
+        // before this callback ran. Remove only the objects we enlivened so we don't
+        // disturb whatever the now-current section has already loaded.
+        canvas.remove(...canvas.getObjects().filter(o => o.__loadGen === myGen));
+        return; // do NOT clear _sectionLoading
+      }
       _sectionLoading = false;
-      // Snap every loaded object to integer CSS-pixel coordinates so the
-      // canvas position matches the HTML preview (fabricLeft/Top also uses
-      // Math.round).  Fractional left/top from zoom>1 drags also cause
-      // blurry text edges in the canvas buffer, so this fixes both issues.
       canvas.getObjects().forEach(snapObjToPixel);
       afterLoad();
       canvas.on('object:added',   onCanvasChange);
       canvas.on('object:removed', onCanvasChange);
+    }, (_jsonObj, fabricObj) => {
+      // Reviver: tag each enlivened object with this load's gen so the stale-gen
+      // check above can identify and remove exactly our objects if we lose the race.
+      if (fabricObj) fabricObj.__loadGen = myGen;
     });
   } else {
     afterLoad();
@@ -445,14 +454,14 @@ function snapshotCurrentSection() {
   if (_sectionLoading) return; // canvas is mid-load; objects are not yet valid
   const active = canvas.getActiveObject();
   if (active && active.type === 'activeSelection') {
-    const members = active.getObjects().slice();
+    // discardActiveObject converts group-relative coords back to absolute so toJSON
+    // captures the correct positions.  We do NOT recreate the ActiveSelection
+    // afterwards: the round-trip (absolute → group-relative → absolute) goes through
+    // qrDecompose twice and compounds floating-point errors by 3-4 px per navigation,
+    // which visibly drifts objects across the canvas over time.
     canvas.discardActiveObject();
-    sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
-    canvas.setActiveObject(new fabric.ActiveSelection(members, { canvas }));
-    canvas.renderAll();
-  } else {
-    sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
   }
+  sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
 }
 
 /* ── Section props panel ────────────────────────────────────────────────── */
@@ -1069,10 +1078,6 @@ let _recoveryTimer = null;
 function scheduleRecovery() {
   clearTimeout(_recoveryTimer);
   _recoveryTimer = setTimeout(() => {
-    // Skip saving if an active selection is live — canvas.toJSON() would return
-    // group-relative coords which would corrupt sections[activeSec].objects.
-    // onCanvasChange already called saveCurrentSectionObjects() synchronously,
-    // so sections data is as fresh as it can be without a discard/restore cycle.
     const active = canvas.getActiveObject();
     if (!active || active.type !== 'activeSelection') {
       saveCurrentSectionObjects();
