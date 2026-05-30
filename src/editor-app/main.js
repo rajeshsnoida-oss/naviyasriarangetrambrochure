@@ -2,9 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell, clipboa
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
-const zlib = require('zlib');
 const PDFDocument = require('pdfkit');
-const { PNG }     = require('pngjs');
 
 // Raise the renderer V8 heap limit so large projects can load during migration.
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
@@ -245,79 +243,33 @@ ipcMain.handle('export:savePrintImages', async (_e, dir, images) => {
   return true;
 });
 
-// Assemble a CMYK PDF from rendered PNG sections.
-// Each PNG is decoded to raw RGBA, converted to DeviceCMYK, compressed with
-// FlateDecode, and embedded as a raw image XObject so pdfkit emits a true
-// DeviceCMYK PDF without requiring any native image-processing binaries.
+// Assemble a print-ready PDF from rendered PNG sections.
+// PNGs are embedded as sRGB via pdfkit's native image support — colors match
+// the screen exactly. Print shops' RIPs convert to press CMYK with ICC
+// profiles, which is more accurate than a profile-less software conversion.
 ipcMain.handle('export:toPdf', async (_e, dir, images, spec) => {
-  const { wIn = 6, hIn = 8.5, dpi = 300 } = spec || {};
+  const { wIn = 6, hIn = 8.5 } = spec || {};
   const PT_PER_IN = 72;
-  const pageW = wIn * PT_PER_IN;  // e.g. 612 pt
-  const pageH = hIn * PT_PER_IN;  // e.g. 432 pt
+  const pageW = wIn * PT_PER_IN;
+  const pageH = hIn * PT_PER_IN;
 
   fs.mkdirSync(dir, { recursive: true });
-  const destPath = path.join(dir, 'brochure-cmyk.pdf');
+  const destPath = path.join(dir, 'brochure-print.pdf');
 
   const doc = new PDFDocument({
     autoFirstPage: false,
     margin: 0,
-    info: { Title: 'Arangetram Brochure (CMYK)', Creator: 'Arangetram Editor' },
+    info: { Title: 'Arangetram Brochure', Creator: 'Arangetram Editor' },
   });
   const ws = fs.createWriteStream(destPath);
   doc.pipe(ws);
 
-  let idx = 0;
   for (const { dataUrl } of (images || [])) {
     const b64 = (dataUrl || '').split(',')[1];
     if (!b64) continue;
-
-    // Decode PNG → raw RGBA pixels
-    const png = PNG.sync.read(Buffer.from(b64, 'base64'));
-    const { width, height, data } = png;  // data: Uint8Array, RGBA
-
-    // Convert RGBA → CMYK (4 bytes per pixel, alpha discarded)
-    const cmyk = Buffer.allocUnsafe(width * height * 4);
-    for (let p = 0, q = 0; p < data.length; p += 4, q += 4) {
-      const r = data[p] / 255, g = data[p + 1] / 255, b = data[p + 2] / 255;
-      const k = 1 - Math.max(r, g, b);
-      if (k >= 1) {
-        cmyk[q] = 0; cmyk[q + 1] = 0; cmyk[q + 2] = 0; cmyk[q + 3] = 255;
-      } else {
-        const ink = 1 - k;
-        cmyk[q]     = Math.round((1 - r - k) / ink * 255);
-        cmyk[q + 1] = Math.round((1 - g - k) / ink * 255);
-        cmyk[q + 2] = Math.round((1 - b - k) / ink * 255);
-        cmyk[q + 3] = Math.round(k * 255);
-      }
-    }
-
-    const compressed = zlib.deflateSync(cmyk);
-
-    // Add a new page for this section
+    const buf = Buffer.from(b64, 'base64');
     doc.addPage({ size: [pageW, pageH], margin: 0 });
-
-    const name = 'Im' + idx++;
-
-    // Create a raw PDF image XObject with DeviceCMYK colorspace
-    const imgRef = doc.ref({
-      Type:             'XObject',
-      Subtype:          'Image',
-      Width:            width,
-      Height:           height,
-      ColorSpace:       'DeviceCMYK',
-      BitsPerComponent: 8,
-      Filter:           'FlateDecode',
-      Length:           compressed.length,
-    });
-    imgRef.write(compressed);
-    imgRef.end();
-
-    // Register in the page's XObject resource dictionary
-    if (!doc.page.resources.data.XObject) doc.page.resources.data.XObject = {};
-    doc.page.resources.data.XObject[name] = imgRef;
-
-    // Draw the image full-page; negative height flips y (PDF origin = bottom-left)
-    doc.addContent(`q ${pageW} 0 0 ${-pageH} 0 ${pageH} cm /${name} Do Q`);
+    doc.image(buf, 0, 0, { width: pageW, height: pageH });
   }
 
   doc.end();

@@ -1,5 +1,37 @@
 # Decisions
 
+## D-045 — PDF export: sRGB via pdfkit doc.image() replaces DeviceCMYK XObject
+
+- **Date:** 2026-05-30
+- **Status:** decided
+- **Context:** The initial PDF export decoded PNGs pixel-by-pixel, applied a naive
+  sRGB→CMYK formula (k = 1 − max(r,g,b)), and embedded raw CMYK data as a
+  DeviceCMYK image XObject. PDF viewers (including Adobe Acrobat) apply a default
+  output profile (SWOP/GRACoL) when rendering DeviceCMYK for screen display, which
+  maps ink values through dot-gain and ink-limit assumptions — making the colors
+  appear systematically lighter and less saturated than the original. Additionally,
+  alpha was discarded entirely: transparent pixels (cutout image edges, soft shadows)
+  became solid black ink, causing dark halos across the page.
+- **Decision:** Replace the manual CMYK pipeline with pdfkit's native `doc.image()`
+  call, which embeds PNGs as sRGB. Output file renamed brochure-print.pdf.
+  `zlib` and `pngjs` dependencies removed from main.js.
+- **Why:** (1) sRGB embedding preserves exact screen colors — no conversion loss.
+  (2) Print shops' RIPs convert sRGB→press CMYK using calibrated ICC profiles,
+  which is more accurate than any profile-less software formula. (3) Modern digital
+  printers (inkjet, digital press) prefer sRGB PDF input; offset printers expect the
+  client to supply either a profiled sRGB PDF or a CMYK PDF with an embedded output
+  profile — neither of which our naive formula produced. Alternatives considered:
+  (a) fix alpha compositing only — resolves halos but not the lightness shift;
+  (b) embed sRGB ICC input profile — requires external ICC file, complex PDF stream
+  construction; (c) use a color-management library (e.g. lcms2 bindings) — accurate
+  but a heavyweight native dependency.
+- **Consequences:** Output is no longer DeviceCMYK. Anyone opening the PDF in Acrobat
+  Preflight will see sRGB/ICCBased colorspace, not DeviceCMYK. For offset printing
+  requiring a pre-converted CMYK PDF, the print shop must perform the conversion on
+  their end (which they do anyway with profiled workflows). The `pngjs` and `zlib`
+  imports are removed; if any other handler in main.js later needs them they must be
+  re-added.
+
 ## D-044 — switchSection race: gen-tagged reviver + surgical stale-object removal
 
 - **Date:** 2026-05-29

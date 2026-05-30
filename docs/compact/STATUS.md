@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-29
+**Last updated**: 2026-05-30
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -51,6 +51,7 @@
 - 2026-05-29 Editor: transform-origin bug fixed — removed originToCSSTransformOrigin (Fabric always rotates/flips around geometric CENTER regardless of originX/Y); all CSS transforms now hardcode 50% 50%; flipX/flipY CSS scaleX(-1)/scaleY(-1) added
 - 2026-05-29 Editor: preview lazyLoad fixed — objectToHTML lazyLoad param (true=export, false=preview); avoids images never loading inside CSS-scaled phone preview; stroke guard for cutout images (no spurious 1px border)
 - 2026-05-29 Editor: image position drift fixed — snapshotCurrentSection no longer recreates ActiveSelection after toJSON (qrDecompose round-trip was compounding 3-4px float error per navigation); switchSection race condition fixed via __loadGen reviver tag + targeted stale-object removal; D-043, D-044
+- 2026-05-30 Editor: PDF export switched from DeviceCMYK XObject to sRGB via pdfkit native image embedding — colors now match screen; output renamed brochure-print.pdf; zlib + pngjs imports removed; D-045
 
 ## In progress
 
