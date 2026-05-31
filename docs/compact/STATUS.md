@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-05-30
+**Last updated**: 2026-05-31
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -52,10 +52,12 @@
 - 2026-05-29 Editor: preview lazyLoad fixed — objectToHTML lazyLoad param (true=export, false=preview); avoids images never loading inside CSS-scaled phone preview; stroke guard for cutout images (no spurious 1px border)
 - 2026-05-29 Editor: image position drift fixed — snapshotCurrentSection no longer recreates ActiveSelection after toJSON (qrDecompose round-trip was compounding 3-4px float error per navigation); switchSection race condition fixed via __loadGen reviver tag + targeted stale-object removal; D-043, D-044
 - 2026-05-30 Editor: PDF export switched from DeviceCMYK XObject to sRGB via pdfkit native image embedding — colors now match screen; output renamed brochure-print.pdf; zlib + pngjs imports removed; D-045
+- 2026-05-31 Editor: canvas justify-left fix — DOM span measurement overrides Fabric's enlargeSpaces() (which uses Canvas2D metrics without ligatures, giving near-zero word-spacing); CSS-measured surplus applied to __charBounds for visible justification matching HTML export; HTML text-align-last:left fix retained; D-046
 
 ## In progress
 
 - Investigate image resize ratio in preview — code math verified correct; awaiting user comparison test to rule out perception issue (canvas zoom vs phone scale)
+- Canvas justify-left fix deployed (D-046) — restart editor and verify intermediate wrapped lines show aligned right edges; single-line/last-paragraph-line should remain left-aligned
 
 ## Next
 

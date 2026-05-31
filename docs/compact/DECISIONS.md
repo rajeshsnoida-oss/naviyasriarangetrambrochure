@@ -1,5 +1,44 @@
 # Decisions
 
+## D-046 — Canvas justify-left: CSS DOM measurement overrides enlargeSpaces()
+
+- **Date:** 2026-05-31
+- **Status:** decided
+- **Context:** Fabric.js `enlargeSpaces()` distributes word-spacing by computing
+  `(textboxWidth - lineWidth) / numSpaces` where `lineWidth` comes from Canvas2D
+  `measureText()`. Canvas2D measures characters individually and does not apply
+  OpenType ligatures (fi→ﬁ, fl→ﬂ, ff…). Playfair Display, the primary brochure
+  font, has many ligatures. CSS text layout applies them, making each wrapped line
+  10–20 px narrower → larger surplus → visible word-spacing. The Canvas2D surplus
+  was near-zero, so `enlargeSpaces()` added ~0.2–0.5 px per space — invisible on
+  screen. Result: canvas showed left-aligned text on all lines while the HTML export
+  showed correctly justified text, a confusing WYSIWYG mismatch.
+- **Decision:** Monkey-patch `fabric.Textbox.prototype.initDimensions` to call
+  `applyCSSJustification()` after every run. For each non-last wrapped line,
+  `applyCSSJustification` resets `__charBounds[a]` to natural Canvas2D widths
+  via `measureLine(a)`, then creates a hidden off-screen `<span>` with the same
+  font/size/weight/style and the line's text, reads its `getBoundingClientRect().width`
+  (CSS font pipeline, ligatures included), and distributes
+  `(textboxWidth − cssWidth) / numSpaces` extra width onto each space char's
+  `kernedWidth`. Results cached by `font|size|weight|style|charSpacing|text`.
+  Cache cleared after font-load promise resolves to avoid stale fallback-font entries.
+- **Why:** (1) DOM measurement is the only way to get the exact same width the
+  browser will use when rendering `text-align:justify` in the HTML export.
+  (2) Alternatives rejected: accepting the mismatch — user requirement is that canvas
+  matches export; Canvas2D `ctx.wordSpacing` property — would double-count word
+  spacing (Fabric already advances position via `c.kernedWidth`); fixed surplus
+  multiplier (e.g. 3×) — inaccurate, doesn't track actual CSS rendering;
+  disabling CSS ligatures in export (`font-feature-settings:"liga" 0`) — degrades
+  print quality for a high-quality serif typeface.
+- **Consequences:** Canvas lines with CSS-based justification may render 5–20 px
+  wider than the textbox visual boundary, because Canvas2D char widths don't
+  change — only spaces grow. This is a minor editing-view artifact; the HTML export
+  is unaffected. Cursor-click accuracy on justified lines is slightly reduced (click
+  position uses `c.left` which is shifted, but based on Canvas2D char positions).
+  DOM span creation is O(unique line texts per section load) with cache amortising
+  across section navigations. If Canvas2D ever adds ligature-aware measurement,
+  this override becomes redundant but harmless (CSS surplus ≈ Canvas2D surplus → near-zero extra applied).
+
 ## D-045 — PDF export: sRGB via pdfkit doc.image() replaces DeviceCMYK XObject
 
 - **Date:** 2026-05-30

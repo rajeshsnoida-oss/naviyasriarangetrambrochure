@@ -178,6 +178,21 @@ function buildFontPicker() {
 // fine for a brochure with ≤50 objects.
 fabric.Object.prototype.objectCaching = false;
 
+// Patch Textbox.initDimensions to apply CSS-based word-spacing after Fabric's
+// own enlargeSpaces() runs. enlargeSpaces() uses Canvas2D font metrics (no
+// ligatures) → near-zero surplus → invisible justification.  The CSS DOM
+// measurement correctly accounts for ligatures, giving visible word-spacing
+// that matches what text-align:justify produces in the HTML export.
+(function patchTextboxJustification() {
+  const _orig = fabric.Textbox.prototype.initDimensions;
+  fabric.Textbox.prototype.initDimensions = function() {
+    _orig.call(this);
+    if (this.textAlign && this.textAlign.indexOf('justify') !== -1 && !this.isEditing) {
+      applyCSSJustification(this);
+    }
+  };
+})();
+
 // Grayscale via ctx.filter — avoids the filter pipeline (which needs getImageData
 // and fails on asset:// images due to canvas taint). ctx.save/restore brackets the
 // filter so it is automatically cleared after the image is drawn.
@@ -356,6 +371,75 @@ function applyCanvasBg(sec) {
   }
 }
 
+/* ── CSS-accurate justification for canvas text ─────────────────────────── */
+// Canvas2D measures text without OpenType ligatures (fi, fl, ff…), so each
+// wrapped line appears nearly full-width → enlargeSpaces() surplus ≈ 0.
+// We re-measure every non-last wrapped line using a DOM span (which fires the
+// full CSS text-shaping pipeline) to get the real surplus and apply it.
+const _cssJustCache = new Map();
+function _cssLineWidth(text, ff, fz, fw, fi_style, charSpacing) {
+  const ls = charSpacing ? (charSpacing * fz / 1000).toFixed(3) : '0';
+  const key = `${ff}|${fz}|${fw}|${fi_style}|${ls}|${text}`;
+  if (_cssJustCache.has(key)) return _cssJustCache.get(key);
+  const s = document.createElement('span');
+  s.style.cssText = `position:fixed;left:-9999px;top:-9999px;` +
+    `font-family:'${ff}',serif;font-size:${fz}px;` +
+    `font-weight:${fw || 400};font-style:${fi_style || 'normal'};` +
+    `white-space:nowrap;visibility:hidden;word-spacing:0;letter-spacing:${ls}px;`;
+  s.textContent = text;
+  document.body.appendChild(s);
+  const w = s.getBoundingClientRect().width;
+  document.body.removeChild(s);
+  _cssJustCache.set(key, w);
+  return w;
+}
+
+function applyCSSJustification(obj) {
+  const nLines = (obj._textLines || []).length;
+  if (nLines <= 1) return; // single-line: Fabric's justify-left rightly left-aligns it
+  const ff = obj.fontFamily || 'serif';
+  const fz = obj.fontSize   || 16;
+  const fw = obj.fontWeight || 400;
+  const fi = obj.fontStyle  || 'normal';
+
+  for (let a = 0; a < nLines; a++) {
+    // Skip: last line of the whole textbox, or last line of each paragraph
+    if (a === nLines - 1) continue;
+    if (obj.isEndOfWrapping && obj.isEndOfWrapping(a)) continue;
+
+    const line     = obj._textLines[a];
+    const lineText = line.join('');
+    const spaces   = (lineText.match(/[ \t]/g) || []);
+    if (spaces.length === 0) continue;
+
+    // Reset __charBounds[a] to natural Canvas2D widths (measureLine, not getLineWidth,
+    // always runs _measureLine regardless of the __lineWidths cache).
+    obj.measureLine(a);
+
+    const cssW    = _cssLineWidth(lineText, ff, fz, fw, fi, obj.charSpacing || 0);
+    const surplus = obj.width - cssW;
+    if (surplus <= 0.5) continue; // CSS also sees no surplus → nothing to distribute
+
+    const extra = surplus / spaces.length;
+
+    // Apply extra width to every space char in __charBounds[a].
+    // Also shift subsequent chars' left values for cursor accuracy.
+    let offsetLeft = 0;
+    for (let h = 0; h <= line.length; h++) {
+      const s = obj.__charBounds[a] && obj.__charBounds[a][h];
+      if (!s) continue;
+      if (h < line.length && /[ \t]/.test(line[h])) {
+        s.width       += extra;
+        s.kernedWidth += extra;
+        s.left        += offsetLeft;
+        offsetLeft    += extra;
+      } else {
+        s.left += offsetLeft;
+      }
+    }
+  }
+}
+
 /* ── Switch active section ──────────────────────────────────────────────── */
 function switchSection(idx) {
   if (idx === activeSec) return;
@@ -393,10 +477,14 @@ function switchSection(idx) {
     });
     Promise.all(fontLoads).then(() => {
       if (gen !== _sectionGen) return; // stale: user already navigated to a different section
+      // Invalidate any CSS width measurements taken before fonts were available
+      // (during loadFromJSON object creation, web fonts may not have loaded yet,
+      // causing stale fallback-font widths to be cached).
+      _cssJustCache.clear();
       canvas.getObjects().forEach(obj => {
         if (obj.type === 'textbox' || obj.type === 'i-text') {
           obj.dirty = true;
-          obj.initDimensions();
+          obj.initDimensions(); // monkey-patched: calls applyCSSJustification internally
         }
       });
       canvas.requestRenderAll();
@@ -1532,7 +1620,18 @@ function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap, lazyLoad
     const fi  = o.fontStyle   || 'normal';
     const td  = o.underline   ? 'underline' : 'none';
     const col = safeColor(o.fill, '#000000');
-    const ta  = (o.textAlign === 'justify-left') ? 'justify' : (o.textAlign || 'left');
+    // Map Fabric justify variants to CSS text-align + text-align-last.
+    // Fabric's justify-left/center/right mean "justify all lines but align the last line
+    // (and lines before explicit \n) to left/center/right" — CSS text-align-last mirrors this.
+    // Without text-align-last, browsers stretch pre-wrap lines before \n, which looks different.
+    const taRaw = o.textAlign || 'left';
+    const ta    = taRaw.startsWith('justify') ? 'justify' : taRaw;
+    const talLast = taRaw === 'justify-left'   ? 'left'
+                  : taRaw === 'justify-center' ? 'center'
+                  : taRaw === 'justify-right'  ? 'right'
+                  : taRaw === 'justify'        ? 'justify'
+                  : null;
+    const tal   = talLast ? `text-align-last:${talLast};` : '';
     const lh  = (o.lineHeight || 1.16).toFixed(2);
     const w   = Math.round((o.width || 200) * sx);
     const ws  = (o.type === 'textbox') ? 'pre-wrap' : 'pre';
@@ -1541,7 +1640,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap, lazyLoad
     usedFonts.add(ff);
     return `    <p style="position:absolute;left:${pxL};top:${pxT};width:${w}px;` +
       `font-family:'${ff}',serif;font-size:${fz}px;font-weight:${fw};font-style:${fi};` +
-      `text-decoration:${td};color:${col};text-align:${ta};line-height:${lh};` +
+      `text-decoration:${td};color:${col};text-align:${ta};${tal}line-height:${lh};` +
       `${txf}${tsh}${opacity}margin:0;padding:0;white-space:${ws};">` +
       `${escHtml(o.text || '')}</p>`;
   }
