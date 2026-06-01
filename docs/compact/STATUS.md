@@ -53,6 +53,8 @@
 - 2026-05-29 Editor: image position drift fixed — snapshotCurrentSection no longer recreates ActiveSelection after toJSON (qrDecompose round-trip was compounding 3-4px float error per navigation); switchSection race condition fixed via __loadGen reviver tag + targeted stale-object removal; D-043, D-044
 - 2026-05-30 Editor: PDF export switched from DeviceCMYK XObject to sRGB via pdfkit native image embedding — colors now match screen; output renamed brochure-print.pdf; zlib + pngjs imports removed; D-045
 - 2026-05-31 Editor: canvas justify-left fix — DOM span measurement overrides Fabric's enlargeSpaces() (which uses Canvas2D metrics without ligatures, giving near-zero word-spacing); CSS-measured surplus applied to __charBounds for visible justification matching HTML export; HTML text-align-last:left fix retained; D-046
+- 2026-05-31 Editor: section-load race condition eliminated — replaced canvas.loadFromJSON with fabric.util.enlivenObjects in switchSection + restoreHistory; gen-check now runs before any canvas mutation; _sectionLoading changed from bool to numeric counter; saveProject captures activeSec at click time and skips snapshot if load is in-flight; D-047
+- 2026-05-31 Editor: Google Font manager — "＋ Font" button in text toolbar opens modal to search/load/preview any Google Font by name; fonts persisted in app-global settings; settings:set fixed to merge-not-overwrite so font list survives project saves; D-048
 
 ## In progress
 

@@ -590,6 +590,54 @@
 - Runtime via Apps Script proxy (Claude API called server-side on toggle) — rejected; adds latency (~1–3s per section), API cost, and complexity for a one-time event brochure.
 - Owner manually writes Tamil — rejected; impractical, LLM-generated is faster and more accurate.
 
+## D-047 — Use fabric.util.enlivenObjects instead of canvas.loadFromJSON for section switching
+
+- **Date:** 2026-05-31
+- **Status:** decided
+- **Context:** `canvas.loadFromJSON` calls `canvas.clear()` internally *before* the user
+  callback runs (inside Fabric's enliven pipeline). If the user switched sections while
+  a prior load was still in flight, that internal `clear()` fired `object:removed` events
+  on the now-live canvas — with the new section's `onCanvasChange` listeners already
+  registered and `_sectionLoading` already reset to `false`. Result: `onCanvasChange` →
+  `saveCurrentSectionObjects()` captured an empty or wrong canvas and wrote it over the
+  active section's data. The `_sectionGen` guard and `__loadGen` reviver tag (D-044)
+  reduced the window but could not eliminate it because `canvas.clear()` ran before the
+  check.
+- **Decision:** Replace `canvas.loadFromJSON` with `fabric.util.enlivenObjects` in both
+  `switchSection` and `restoreHistory`. `canvas.remove()` clears the canvas explicitly
+  first, then `enlivenObjects` resolves objects asynchronously — the gen/section check
+  runs before any `canvas.add()` call, so a stale callback discards cleanly with zero
+  canvas mutation. `_sectionLoading` changed from `false` (bool) to `0` (numeric counter)
+  to handle overlapping calls. `saveProject` now captures `activeSec` at click time and
+  skips the snapshot if `_sectionLoading > 0`.
+- **Why:** `enlivenObjects` never calls `canvas.clear()` internally. Running the gen-check
+  before any canvas mutation is the only approach that fully closes the race window. The
+  bool → counter change was necessary because two rapid switches would decrement past zero
+  with a bool.
+- **Consequences:** All section loads must manually batch-add objects with
+  `renderOnAddRemove = false` and call `renderAll()` — slightly more boilerplate but
+  explicit. `restoreHistory` follows the same pattern with an `activeSec` identity check
+  instead of a gen check.
+
+## D-048 — Custom Google Fonts stored in app-global settings, not per-project
+
+- **Date:** 2026-05-31
+- **Status:** decided
+- **Context:** The font manager lets users load any Google Font by name. Fonts needed to
+  persist across sessions. Two storage options: (a) embed font metadata in the `.brochure`
+  project JSON alongside sections, or (b) store in app-global `editor-settings.json`.
+- **Decision:** Store `customFonts: [{name, cat}]` in `editor-settings.json` (app-global).
+  On startup, inject `<link>` stylesheets for all persisted fonts before `buildFontPicker()`
+  runs. `settings:set` in `main.js` fixed to merge-not-overwrite so the `customFonts` key
+  survives unrelated `setSettings` calls (e.g. `lastProjectPath` on every project save).
+- **Why:** Fonts are a user/machine preference, not project data. A user adding "Noto Serif"
+  once expects it available in every project without re-adding it. Per-project storage would
+  require re-adding fonts for every new `.brochure` file.
+- **Consequences:** Custom fonts do not travel with the `.brochure` file. Sharing a project
+  with someone on another machine will fall back to system fonts for any custom font they
+  haven't added themselves. If portability becomes a requirement, the font list should be
+  embedded in the `.brochure` JSON and merged with app settings on open.
+
 <!--
 Template for new entries:
 
