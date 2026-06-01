@@ -48,6 +48,136 @@ const FONTS = [
 
 const GOOGLE_FONTS = new Set(FONTS.filter(f => f.cat !== 'System').map(f => f.name));
 
+/* ── Custom / downloaded fonts ──────────────────────────────────────────── */
+let customFonts = []; // [{name, cat}] — persisted in settings.customFonts
+
+function injectGoogleFont(name) {
+  const id = 'gf-' + name.replace(/\s+/g, '-').toLowerCase();
+  if (document.getElementById(id)) return;
+  const link = document.createElement('link');
+  link.id   = id;
+  link.rel  = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,300;0,400;0,700;1,400&display=swap`;
+  document.head.appendChild(link);
+}
+
+async function persistCustomFonts() {
+  await window.editorAPI.setSettings({ customFonts });
+}
+
+function registerCustomFont(name, cat) {
+  if (FONTS.some(f => f.name === name)) return;
+  FONTS.push({ name, cat });
+  customFonts.push({ name, cat });
+  buildFontPicker();
+  persistCustomFonts();
+}
+
+function unregisterCustomFont(name) {
+  const idx = FONTS.findIndex(f => f.name === name);
+  if (idx !== -1) FONTS.splice(idx, 1);
+  customFonts = customFonts.filter(f => f.name !== name);
+  buildFontPicker();
+  persistCustomFonts();
+}
+
+function renderFontList() {
+  const el = document.getElementById('fm-list');
+  if (!customFonts.length) {
+    el.innerHTML = '<div class="fm-empty">No custom fonts added yet.</div>';
+    return;
+  }
+  el.innerHTML = customFonts.map(f =>
+    `<div class="fm-entry">
+       <span class="fm-entry-name" style="font-family:'${f.name}',sans-serif">${f.name}</span>
+       <span class="fm-cat-badge">${f.cat}</span>
+       <button class="fm-remove" data-name="${f.name}" title="Remove">✕</button>
+     </div>`
+  ).join('');
+  el.querySelectorAll('.fm-remove').forEach(btn =>
+    btn.addEventListener('click', () => {
+      unregisterCustomFont(btn.dataset.name);
+      renderFontList();
+    })
+  );
+}
+
+async function loadFontPreview(name) {
+  const previewEl  = document.getElementById('fm-preview');
+  const previewTxt = document.getElementById('fm-preview-text');
+  const previewErr = document.getElementById('fm-preview-error');
+  const addRow     = document.getElementById('fm-add-row');
+  previewEl.classList.add('visible');
+  previewTxt.textContent = '';
+  previewErr.textContent = '';
+  addRow.style.display   = 'none';
+  injectGoogleFont(name);
+  try {
+    await document.fonts.load(`400 18px '${name}'`);
+    if (!document.fonts.check(`400 18px '${name}'`)) throw new Error('not loaded');
+    previewTxt.style.fontFamily = `'${name}', sans-serif`;
+    previewTxt.textContent = `${name}: Arangetram 2025`;
+    document.getElementById('fm-add').dataset.name = name;
+    addRow.style.display = 'flex';
+  } catch {
+    previewErr.textContent = `"${name}" not found. Check the exact name at fonts.google.com`;
+  }
+}
+
+function openFontManager() {
+  const overlay = document.getElementById('font-mgr-overlay');
+  overlay.classList.add('open');
+  document.getElementById('fm-name').value = '';
+  document.getElementById('fm-preview').classList.remove('visible');
+  document.getElementById('fm-add-row').style.display = 'none';
+  renderFontList();
+  document.getElementById('fm-name').focus();
+}
+
+function closeFontManager() {
+  document.getElementById('font-mgr-overlay').classList.remove('open');
+}
+
+function bindFontManager() {
+  document.getElementById('btn-font-mgr').addEventListener('click', openFontManager);
+  document.getElementById('fm-close').addEventListener('click', closeFontManager);
+
+  document.getElementById('font-mgr-overlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('font-mgr-overlay')) closeFontManager();
+  });
+
+  document.getElementById('fm-load').addEventListener('click', async () => {
+    const name = document.getElementById('fm-name').value.trim();
+    if (!name) return;
+    const btn = document.getElementById('fm-load');
+    btn.textContent = '…';
+    btn.disabled = true;
+    await loadFontPreview(name);
+    btn.textContent = 'Load';
+    btn.disabled = false;
+  });
+
+  document.getElementById('fm-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('fm-load').click();
+  });
+
+  document.getElementById('fm-add').addEventListener('click', () => {
+    const name = document.getElementById('fm-add').dataset.name;
+    const cat  = document.getElementById('fm-cat').value;
+    if (!name) return;
+    if (FONTS.some(f => f.name === name)) {
+      document.getElementById('fm-preview-error').textContent = `"${name}" is already in the picker.`;
+      return;
+    }
+    registerCustomFont(name, cat);
+    renderFontList();
+    document.getElementById('fm-add-row').style.display = 'none';
+    document.getElementById('fm-preview').classList.remove('visible');
+    document.getElementById('fm-name').value = '';
+    document.getElementById('fm-name').focus();
+  });
+}
+
 /* ── Shadow presets ─────────────────────────────────────────────────────── */
 const SHADOW_PRESETS = {
   drop:        { color: 'rgba(0,0,0,0.5)',       blur: 6,  offsetX: 3,  offsetY: 3  },
@@ -139,7 +269,7 @@ let removeBgFn  = null;
 let clipboard   = null;   // stores cloned Fabric objects for copy/paste
 let pasteOffset = 0;      // cumulative paste offset so repeated pastes don't stack exactly
 let _sectionGen     = 0;     // incremented on every switchSection to discard stale async callbacks
-let _sectionLoading = false; // true while loadFromJSON is in-flight; blocks snapshotCurrentSection
+let _sectionLoading = 0;     // >0 while enlivenObjects calls are in-flight; blocks snapshotCurrentSection
 
 /* ── Text style presets ─────────────────────────────────────────────────── */
 const DEFAULT_TEXT_STYLES = [
@@ -495,26 +625,23 @@ function switchSection(idx) {
   canvas.off('object:removed', onCanvasChange);
   canvas.remove(...canvas.getObjects());
   if (sec.objects && sec.objects.length) {
-    _sectionLoading = true;
-    const myGen = gen;
-    canvas.loadFromJSON({ version: '5.3.0', objects: sec.objects }, () => {
-      if (gen !== _sectionGen) {
-        // Stale load: Fabric's __setupCanvas already added our objects to the canvas
-        // before this callback ran. Remove only the objects we enlivened so we don't
-        // disturb whatever the now-current section has already loaded.
-        canvas.remove(...canvas.getObjects().filter(o => o.__loadGen === myGen));
-        return; // do NOT clear _sectionLoading
-      }
-      _sectionLoading = false;
+    _sectionLoading++;
+    // Use enlivenObjects instead of loadFromJSON so that canvas.clear() is never
+    // called internally by Fabric — the gen-check runs before any canvas mutation,
+    // eliminating the race where a stale callback fires object:removed on the live canvas.
+    fabric.util.enlivenObjects(sec.objects, (enlivenedObjects) => {
+      _sectionLoading = Math.max(0, _sectionLoading - 1);
+      if (gen !== _sectionGen) return; // stale switch — discard; canvas already cleared above
+      const prev = canvas.renderOnAddRemove;
+      canvas.renderOnAddRemove = false;
+      enlivenedObjects.forEach(obj => canvas.add(obj));
+      canvas.renderOnAddRemove = prev;
       canvas.getObjects().forEach(snapObjToPixel);
+      canvas.renderAll();
       afterLoad();
       canvas.on('object:added',   onCanvasChange);
       canvas.on('object:removed', onCanvasChange);
-    }, (_jsonObj, fabricObj) => {
-      // Reviver: tag each enlivened object with this load's gen so the stale-gen
-      // check above can identify and remove exactly our objects if we lose the race.
-      if (fabricObj) fabricObj.__loadGen = myGen;
-    });
+    }, 'fabric');
   } else {
     afterLoad();
     canvas.on('object:added',   onCanvasChange);
@@ -528,7 +655,7 @@ function switchSection(idx) {
 
 function saveCurrentSectionObjects() {
   if (activeSec < 0 || activeSec >= sections.length) return;
-  if (_sectionLoading) return; // don't overwrite section data while loadFromJSON is in flight
+  if (_sectionLoading > 0) return; // don't overwrite section data while enlivenObjects is in flight
   sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
 }
 
@@ -539,7 +666,7 @@ function saveCurrentSectionObjects() {
 // floating-point drift that visibly resizes objects.
 function snapshotCurrentSection() {
   if (activeSec < 0 || activeSec >= sections.length) return;
-  if (_sectionLoading) return; // canvas is mid-load; objects are not yet valid
+  if (_sectionLoading > 0) return; // canvas is mid-load; objects are not yet valid
   const active = canvas.getActiveObject();
   if (active && active.type === 'activeSelection') {
     // discardActiveObject converts group-relative coords back to absolute so toJSON
@@ -1189,16 +1316,20 @@ function onCanvasChange() {
 function restoreHistory(json) {
   if (activeSec < 0) return;
   const sec = sections[activeSec];
+  const restoredSec = activeSec; // bind at call time in case user switches mid-restore
   const objects = JSON.parse(json);
   canvas.off('object:added',   onCanvasChange);
   canvas.off('object:removed', onCanvasChange);
   canvas.remove(...canvas.getObjects());
-  _sectionLoading = true;
-  canvas.loadFromJSON({ version: '5.3.0', objects }, () => {
-    _sectionLoading = false;
+  _sectionLoading++;
+  fabric.util.enlivenObjects(objects, (enlivenedObjects) => {
+    _sectionLoading = Math.max(0, _sectionLoading - 1);
+    if (activeSec !== restoredSec) return; // section changed while restoring; discard
+    const prev = canvas.renderOnAddRemove;
+    canvas.renderOnAddRemove = false;
+    enlivenedObjects.forEach(obj => canvas.add(obj));
+    canvas.renderOnAddRemove = prev;
     canvas.getObjects().forEach(snapObjToPixel);
-    // loadFromJSON calls canvas.clear() internally which resets backgroundColor
-    // and backgroundImage — re-apply them after the load completes.
     applyCanvasBg(sec);
     if (sec.bgImage) {
       fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec), { crossOrigin: 'anonymous' });
@@ -1207,7 +1338,7 @@ function restoreHistory(json) {
     canvas.on('object:added',   onCanvasChange);
     canvas.on('object:removed', onCanvasChange);
     sec.objects = objects;
-  });
+  }, 'fabric');
 }
 
 function undo() {
@@ -1250,7 +1381,13 @@ function zoomFit() {
 /* ── Save / Load ────────────────────────────────────────────────────────── */
 async function saveProject(saveAs) {
   clearTimeout(_recoveryTimer);
-  snapshotCurrentSection();
+  // Capture the active section index at the moment Save is clicked.
+  // snapshotCurrentSection() already guards against mid-load, so this just
+  // ensures the snapshot targets the section the user is actually viewing.
+  const saveSec = activeSec;
+  if (saveSec >= 0 && saveSec < sections.length && _sectionLoading === 0) {
+    snapshotCurrentSection();
+  }
   if (saveAs || !projectPath) {
     const p = await window.editorAPI.saveProject(projectPath);
     if (!p) return;
@@ -1988,6 +2125,18 @@ function bindMenuEvents() {
 
 /* ── Bootstrap ──────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
+  // Load persisted custom fonts before building the picker
+  try {
+    const s = await window.editorAPI.getSettings();
+    if (Array.isArray(s.customFonts) && s.customFonts.length) {
+      customFonts = s.customFonts;
+      customFonts.forEach(f => {
+        injectGoogleFont(f.name);
+        if (!FONTS.some(ff => ff.name === f.name)) FONTS.push({ name: f.name, cat: f.cat });
+      });
+    }
+  } catch { /* ignore — settings unavailable */ }
+
   buildFontPicker();
   renderTextStyles();
   initCanvas();
@@ -1995,6 +2144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindSectionProps();
   bindKeyboard();
   bindMenuEvents();
+  bindFontManager();
   document.getElementById('btn-add-section').addEventListener('click', addSection);
 
   // Try to resume: saved project → recovery snapshot → default template

@@ -371,7 +371,7 @@ ipcMain.handle('asset:clearDir', async () => {
 });
 
 ipcMain.handle('settings:get',      () => readSettings());
-ipcMain.handle('settings:set',      (_e, obj) => { writeSettings(obj); return true; });
+ipcMain.handle('settings:set',      (_e, obj) => { writeSettings({ ...readSettings(), ...obj }); return true; });
 ipcMain.handle('recovery:write',    (_e, data) => { try { fs.writeFileSync(RECOVERY_FILE, data, 'utf8'); } catch {} return true; });
 ipcMain.handle('recovery:read',     () => { try { return fs.readFileSync(RECOVERY_FILE, 'utf8'); } catch { return null; } });
 ipcMain.handle('recovery:clear',    () => { try { if (fs.existsSync(RECOVERY_FILE)) fs.unlinkSync(RECOVERY_FILE); } catch {} return true; });

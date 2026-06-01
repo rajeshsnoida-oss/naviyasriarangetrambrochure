@@ -49,6 +49,7 @@
       <option value="right">⬛ Right</option>
       <option value="justify-left">⬜ Justify</option>
     </select>
+    <button class="tb-btn" id="btn-font-mgr" title="Add more Google Fonts">＋ Font</button>
     <select id="prop-shadow" title="Text effect">
       <option value="">No effect</option>
       <option value="drop">Drop shadow</option>
@@ -226,6 +227,39 @@
     <div id="cutout-msg" style="font-size:14px;">Initialising AI…</div>
     <div id="cutout-progress" style="margin-top:12px; height:6px; background:#3e3e42; border-radius:3px; overflow:hidden;">
       <div id="cutout-bar" style="height:100%; background:#7b2d8b; width:0%; transition:width 0.3s;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Font manager modal ──────────────────────────────────────────────── -->
+<div id="font-mgr-overlay">
+  <div id="font-mgr-box">
+    <h3>Add Google Fonts</h3>
+    <div class="fm-row">
+      <input type="text" id="fm-name" placeholder="Font name, e.g. Nunito Sans" autocomplete="off" spellcheck="false">
+      <button class="tb-btn" id="fm-load">Load</button>
+    </div>
+    <div id="fm-preview">
+      <span id="fm-preview-text"></span>
+      <span id="fm-preview-error" class="fm-error"></span>
+    </div>
+    <div class="fm-row" id="fm-add-row" style="display:none">
+      <label class="fm-label">Category
+        <select id="fm-cat">
+          <option value="Serif">Serif</option>
+          <option value="Sans" selected>Sans</option>
+          <option value="Script">Script</option>
+          <option value="Decorative">Decorative</option>
+        </select>
+      </label>
+      <button class="tb-btn primary" id="fm-add">Add to editor</button>
+    </div>
+    <hr class="fm-sep">
+    <div class="fm-section-title">Custom fonts</div>
+    <div id="fm-list"></div>
+    <div class="fm-footer">
+      <span class="fm-hint">Find font names at <em>fonts.google.com</em></span>
+      <button class="tb-btn" id="fm-close">Close</button>
     </div>
   </div>
 </div>
