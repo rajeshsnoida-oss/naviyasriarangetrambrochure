@@ -638,6 +638,49 @@
   haven't added themselves. If portability becomes a requirement, the font list should be
   embedded in the `.brochure` JSON and merged with app settings on open.
 
+## D-049 — Justify surplus uses Canvas2D measureLine width, not CSS DOM measurement
+
+- **Date:** 2026-06-01
+- **Status:** decided
+- **Context:** `applyCSSJustification` (D-046) used CSS DOM span measurement to compute
+  word-spacing surplus distributed into Fabric's Canvas2D `__charBounds`. CSS measures
+  text narrower than Canvas2D (OpenType ligatures collapse glyph pairs), so the CSS-derived
+  surplus was too large. After distribution, the last character's right edge exceeded
+  `obj.width`, causing visible overflow from the text box. A first attempt at fixing via
+  canvas `ctx.clip()` was rejected — it cut off the character rather than preventing the
+  overflow.
+- **Decision:** Replace CSS DOM surplus (`obj.width - cssW`) with the Canvas2D natural line
+  width from `measureLine(a)`'s return value (`surplus = obj.width - metrics.width`). Since
+  `measureLine` resets `__charBounds` and its returned `width` equals the sum of those
+  charBounds, the distribution makes charBounds sum exactly to `obj.width` — no overflow.
+  Removed `_cssJustCache`, `_cssLineWidth`, and the now-dead comment block.
+- **Why:** The charBounds coordinate system is Canvas2D — using a CSS-measured surplus to
+  drive Canvas2D offsets is a unit mismatch. The Canvas2D surplus is the correct quantity.
+  The clip workaround hid the symptom; this fixes the root cause.
+- **Consequences:** Word-spacing is now purely Canvas2D-based. Justified spread may be
+  fractionally less than CSS `text-align:justify` (Canvas2D measures wider → less surplus
+  remaining), but text always fits within the box. The HTML export is unaffected (CSS
+  handles justification there independently).
+
+## D-050 — Explicitly clear canvas.backgroundImage when navigating to a section without one
+
+- **Date:** 2026-06-01
+- **Status:** decided
+- **Context:** `switchSection` afterLoad and `restoreHistory` called `applyCanvasBg` (which
+  sets only `canvas.backgroundColor`) then conditionally loaded `sec.bgImage`. When the
+  target section had no `bgImage`, no explicit clear was issued. Fabric tracks
+  `backgroundImage` independently from `backgroundColor`, so the previous section's image
+  persisted on the canvas, bleeding visually until the user removed it manually each time
+  they navigated sections.
+- **Decision:** Add `else { canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas)); }`
+  in both `switchSection` afterLoad and `restoreHistory` when `sec.bgImage` is falsy.
+  Mirrors the pattern already present in `propagateBgToAll`.
+- **Why:** `applyCanvasBg` never touches `backgroundImage` — a null-set is the only way to
+  clear it. The pattern was already established in `propagateBgToAll`; this brings
+  section-switching into parity.
+- **Consequences:** Background images never bleed between sections. One additional Fabric
+  call per section navigation for bgImage-less sections (negligible cost).
+
 <!--
 Template for new entries:
 

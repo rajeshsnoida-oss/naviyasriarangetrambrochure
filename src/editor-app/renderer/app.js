@@ -502,35 +502,9 @@ function applyCanvasBg(sec) {
 }
 
 /* ── CSS-accurate justification for canvas text ─────────────────────────── */
-// Canvas2D measures text without OpenType ligatures (fi, fl, ff…), so each
-// wrapped line appears nearly full-width → enlargeSpaces() surplus ≈ 0.
-// We re-measure every non-last wrapped line using a DOM span (which fires the
-// full CSS text-shaping pipeline) to get the real surplus and apply it.
-const _cssJustCache = new Map();
-function _cssLineWidth(text, ff, fz, fw, fi_style, charSpacing) {
-  const ls = charSpacing ? (charSpacing * fz / 1000).toFixed(3) : '0';
-  const key = `${ff}|${fz}|${fw}|${fi_style}|${ls}|${text}`;
-  if (_cssJustCache.has(key)) return _cssJustCache.get(key);
-  const s = document.createElement('span');
-  s.style.cssText = `position:fixed;left:-9999px;top:-9999px;` +
-    `font-family:'${ff}',serif;font-size:${fz}px;` +
-    `font-weight:${fw || 400};font-style:${fi_style || 'normal'};` +
-    `white-space:nowrap;visibility:hidden;word-spacing:0;letter-spacing:${ls}px;`;
-  s.textContent = text;
-  document.body.appendChild(s);
-  const w = s.getBoundingClientRect().width;
-  document.body.removeChild(s);
-  _cssJustCache.set(key, w);
-  return w;
-}
-
 function applyCSSJustification(obj) {
   const nLines = (obj._textLines || []).length;
   if (nLines <= 1) return; // single-line: Fabric's justify-left rightly left-aligns it
-  const ff = obj.fontFamily || 'serif';
-  const fz = obj.fontSize   || 16;
-  const fw = obj.fontWeight || 400;
-  const fi = obj.fontStyle  || 'normal';
 
   for (let a = 0; a < nLines; a++) {
     // Skip: last line of the whole textbox, or last line of each paragraph
@@ -542,13 +516,14 @@ function applyCSSJustification(obj) {
     const spaces   = (lineText.match(/[ \t]/g) || []);
     if (spaces.length === 0) continue;
 
-    // Reset __charBounds[a] to natural Canvas2D widths (measureLine, not getLineWidth,
-    // always runs _measureLine regardless of the __lineWidths cache).
-    obj.measureLine(a);
-
-    const cssW    = _cssLineWidth(lineText, ff, fz, fw, fi, obj.charSpacing || 0);
-    const surplus = obj.width - cssW;
-    if (surplus <= 0.5) continue; // CSS also sees no surplus → nothing to distribute
+    // Reset __charBounds[a] to natural Canvas2D widths; measureLine returns { width }
+    // which is the sum of those charBounds — the true Canvas2D line width.
+    // Using CSS-measured width for surplus overshoots because CSS measures narrower
+    // (ligatures collapse glyphs) while charBounds are Canvas2D-based, causing the
+    // last character to overflow. Using the Canvas2D width keeps charBounds exact.
+    const metrics = obj.measureLine(a);
+    const surplus = obj.width - metrics.width;
+    if (surplus <= 0.5) continue;
 
     const extra = surplus / spaces.length;
 
@@ -591,6 +566,8 @@ function switchSection(idx) {
         if (gen !== _sectionGen) return; // stale: another switchSection ran
         applyBgImageToCanvas(img, sec);
       }, { crossOrigin: 'anonymous' });
+    } else {
+      canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
     }
     // Re-render once the section's web fonts are confirmed loaded.
     // document.fonts.ready is unreliable for lazily-loaded @font-face — it resolves
@@ -607,10 +584,6 @@ function switchSection(idx) {
     });
     Promise.all(fontLoads).then(() => {
       if (gen !== _sectionGen) return; // stale: user already navigated to a different section
-      // Invalidate any CSS width measurements taken before fonts were available
-      // (during loadFromJSON object creation, web fonts may not have loaded yet,
-      // causing stale fallback-font widths to be cached).
-      _cssJustCache.clear();
       canvas.getObjects().forEach(obj => {
         if (obj.type === 'textbox' || obj.type === 'i-text') {
           obj.dirty = true;
@@ -1333,6 +1306,8 @@ function restoreHistory(json) {
     applyCanvasBg(sec);
     if (sec.bgImage) {
       fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec), { crossOrigin: 'anonymous' });
+    } else {
+      canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
     }
     canvas.renderAll();
     canvas.on('object:added',   onCanvasChange);
