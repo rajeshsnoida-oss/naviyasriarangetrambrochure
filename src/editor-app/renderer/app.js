@@ -341,6 +341,11 @@ fabric.Object.prototype.objectCaching = false;
 })();
 
 function initCanvas() {
+  // Fabric's default NUM_FRACTION_DIGITS=2 rounds scaleX/scaleY to 2 d.p. on toJSON,
+  // which discards small resize changes (e.g. 0.1136 → 0.11) causing scale to revert
+  // on every section switch. 4 d.p. is sub-pixel precision for any realistic canvas scale.
+  fabric.Object.NUM_FRACTION_DIGITS = 4;
+
   canvas = new fabric.Canvas('c', {
     width:  CANVAS_W,
     height: 600,
