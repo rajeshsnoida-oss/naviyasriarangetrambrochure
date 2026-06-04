@@ -56,11 +56,11 @@
 - 2026-05-31 Editor: section-load race condition eliminated — replaced canvas.loadFromJSON with fabric.util.enlivenObjects in switchSection + restoreHistory; gen-check now runs before any canvas mutation; _sectionLoading changed from bool to numeric counter; saveProject captures activeSec at click time and skips snapshot if load is in-flight; D-047
 - 2026-05-31 Editor: Google Font manager — "＋ Font" button in text toolbar opens modal to search/load/preview any Google Font by name; fonts persisted in app-global settings; settings:set fixed to merge-not-overwrite so font list survives project saves; D-048
 - 2026-06-01 Editor: justify text overflow fixed — applyCSSJustification now uses measureLine(a).width (Canvas2D natural line width) for surplus instead of CSS DOM measurement; charBounds sum exactly to obj.width; removed _cssJustCache, _cssLineWidth, and clip-patch workaround; D-049
+- 2026-06-03 Editor: image scale not retained across section switches fixed — fabric.Object.NUM_FRACTION_DIGITS raised 2→4 in initCanvas(); prevents rounding of scaleX/scaleY to 2 d.p. on every toJSON() call during section switch; D-051
 - 2026-06-01 Editor: bgImage bleed fixed — switchSection afterLoad + restoreHistory now call canvas.setBackgroundImage(null, …) when sec.bgImage is falsy, clearing previous section's background image on navigation; D-050
 
 ## In progress
 
-- Investigate image resize ratio in preview — code math verified correct; awaiting user comparison test to rule out perception issue (canvas zoom vs phone scale)
 - Canvas justify fix updated (D-049) — restart editor and verify wrapped lines show no character overflow; justification still visibly spreads text to fill line width
 
 ## Next

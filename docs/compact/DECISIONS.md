@@ -1,5 +1,29 @@
 # Decisions
 
+## D-051 — Raise fabric.Object.NUM_FRACTION_DIGITS 2→4 to preserve image scale across section switches
+
+- **Date:** 2026-06-03
+- **Status:** decided
+- **Context:** Images were not retaining their configured scale (scaleX/scaleY)
+  after navigating between sections. Resizing an image from scaleX=0.11 to 0.1136
+  reverted to 0.11 on returning to the section. Debug logging confirmed
+  e.target.scaleX=0.1136 after object:modified, but canvas.toJSON() immediately
+  after returned scaleX=0.1100. Root cause: Fabric.js serializes all numeric
+  properties via parseFloat(Number(x).toFixed(NUM_FRACTION_DIGITS)) where the
+  global default is 2. Every section switch calls canvas.toJSON() to snapshot,
+  so any scale change smaller than 0.005 is silently discarded on the first navigation.
+- **Decision:** Set fabric.Object.NUM_FRACTION_DIGITS = 4 in initCanvas() before
+  creating the Fabric canvas instance.
+- **Why:** 4 d.p. gives sub-pixel precision for any scale in use on a 794px canvas
+  (0.0001 scale ≈ 0.08px, well below the 1px rendering threshold). The default 2 d.p.
+  means the minimum detectable scale change is 0.01 — roughly 8px at scale 0.1 — too
+  coarse for alignment work. Overriding toObject per image type was rejected as more
+  invasive and fragile.
+- **Consequences:** .brochure JSON files store numeric properties with up to 4 d.p.
+  instead of 2 (negligibly larger files). All numeric properties gain higher precision;
+  harmless since snapObjToPixel rounds positions to integers. Backwards-compatible:
+  existing 2-d.p. files load and save correctly.
+
 ## D-046 — Canvas justify-left: CSS DOM measurement overrides enlargeSpaces()
 
 - **Date:** 2026-05-31
