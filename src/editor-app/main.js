@@ -1,7 +1,10 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell, clipboard, nativeImage } = require('electron');
-const path = require('path');
-const fs   = require('fs');
-const os   = require('os');
+const path   = require('path');
+const fs     = require('fs');
+const os     = require('os');
+const https  = require('https');
+const zlib   = require('zlib');
+const { PNG } = require('pngjs');
 const PDFDocument = require('pdfkit');
 
 // Raise the renderer V8 heap limit so large projects can load during migration.
@@ -277,6 +280,401 @@ ipcMain.handle('export:toPdf', async (_e, dir, images, spec) => {
     ws.on('finish', () => resolve(destPath));
     ws.on('error', reject);
   });
+});
+
+// ── CMYK PDF helpers ──────────────────────────────────────────────────────────
+
+function httpGet(url, headers, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const opts = Object.assign({ headers: Object.assign({ 'User-Agent': 'Mozilla/5.0' }, headers || {}) }, require('url').parse(url));
+    const req = https.get(opts, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        resolve(httpGet(res.headers.location, headers, timeoutMs));
+        return;
+      }
+      const chunks = [];
+      res.on('data', d => chunks.push(d));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    }).on('error', reject);
+    req.setTimeout(timeoutMs, () => { req.destroy(new Error(`httpGet timeout: ${url.slice(0, 80)}`)); });
+  });
+}
+
+const FONT_CACHE_DIR = path.join(app.getPath('userData'), 'pdf-fonts');
+
+// pdfkit built-in equivalents for system fonts used in the editor.
+const SYSTEM_FONT_MAP = {
+  'Georgia':         { n: 'Times-Roman',    b: 'Times-Bold',          i: 'Times-Italic',          bi: 'Times-BoldItalic'       },
+  'Times New Roman': { n: 'Times-Roman',    b: 'Times-Bold',          i: 'Times-Italic',          bi: 'Times-BoldItalic'       },
+  'Arial':           { n: 'Helvetica',      b: 'Helvetica-Bold',      i: 'Helvetica-Oblique',     bi: 'Helvetica-BoldOblique'  },
+  'Verdana':         { n: 'Helvetica',      b: 'Helvetica-Bold',      i: 'Helvetica-Oblique',     bi: 'Helvetica-BoldOblique'  },
+  'Trebuchet MS':    { n: 'Helvetica',      b: 'Helvetica-Bold',      i: 'Helvetica-Oblique',     bi: 'Helvetica-BoldOblique'  },
+  'Impact':          { n: 'Helvetica-Bold', b: 'Helvetica-Bold',      i: 'Helvetica-BoldOblique', bi: 'Helvetica-BoldOblique'  },
+};
+
+// Download a Google Font as TTF/OTF and cache it. Returns Buffer or null on failure.
+// targetCodepoint (optional): when set, selects the @font-face block whose unicode-range
+// covers that codepoint — required for non-Latin fonts (e.g. Noto Sans Tamil U+0B89)
+// because Google Fonts CSS splits the font into per-script subsets; taking the first URL
+// blindly gives the Latin block which has no Tamil glyphs.
+async function fetchGoogleFont(family, weight, italic, targetCodepoint) {
+  const cacheKey = `${family.replace(/\s+/g, '_')}_${weight}_${italic ? 'i' : 'n'}.ttf`;
+  const cachePath = path.join(FONT_CACHE_DIR, cacheKey);
+  if (fs.existsSync(cachePath)) return fs.readFileSync(cachePath);
+
+  const TTF_RE = /url\(['"]?([^'")\s]+\.(?:ttf|otf))['"]?\)/i;
+
+  // Parse @font-face blocks from CSS; return the src URL covering targetCodepoint,
+  // or the first URL found when no targetCodepoint is specified.
+  function pickFontUrl(css, cp) {
+    const blocks = css.split('@font-face').slice(1);
+    let firstUrl = null;
+    for (const block of blocks) {
+      const urlM = block.match(TTF_RE);
+      if (!urlM) continue;
+      if (!firstUrl) firstUrl = urlM[1];
+      if (!cp) return firstUrl; // No target — first URL wins
+      const rangeM = block.match(/unicode-range\s*:\s*([^;]+)/i);
+      if (!rangeM) return urlM[1]; // No range constraint = full font
+      const covered = rangeM[1].split(',').some(r => {
+        r = r.trim().replace(/^U\+/i, '');
+        if (r.includes('-')) {
+          const [s, e] = r.split('-').map(x => parseInt(x, 16));
+          return cp >= s && cp <= e;
+        }
+        return parseInt(r, 16) === cp;
+      });
+      if (covered) return urlM[1];
+    }
+    return firstUrl; // Fallback: first URL in file
+  }
+
+  try {
+    // Attempt 1: v1 API — returns full TTF for most older fonts, no subsetting.
+    const styleStr = italic ? `${weight}italic` : weight;
+    const v1Css = (await httpGet(
+      `https://fonts.googleapis.com/css?family=${encodeURIComponent(family)}:${styleStr}`,
+      { 'User-Agent': 'Mozilla/5.0' }
+    )).toString('utf8');
+    let fontUrl = pickFontUrl(v1Css, targetCodepoint);
+
+    // Attempt 2: v2 API with old IE UA forces TTF/OTF for newer fonts (e.g. Noto Sans Tamil).
+    // The v2 CSS lists multiple @font-face blocks with unicode-range; pickFontUrl selects
+    // the block covering targetCodepoint so we download the Tamil subset, not the Latin one.
+    if (!fontUrl) {
+      const v2Css = (await httpGet(
+        `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:ital,wght@${italic ? 1 : 0},${weight}`,
+        { 'User-Agent': 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)' }
+      )).toString('utf8');
+      fontUrl = pickFontUrl(v2Css, targetCodepoint);
+    }
+
+    if (!fontUrl) return null;
+    const buf = await httpGet(fontUrl);
+    if (!fs.existsSync(FONT_CACHE_DIR)) fs.mkdirSync(FONT_CACHE_DIR, { recursive: true });
+    fs.writeFileSync(cachePath, buf);
+    return buf;
+  } catch { return null; }
+}
+
+// Convert hex color to CMYK [c,m,y,k] (0–1 range, float).
+function hexToCmyk(hex) {
+  const c = parseInt(hex.slice(1), 16);
+  const r = ((c >> 16) & 0xff) / 255;
+  const g = ((c >>  8) & 0xff) / 255;
+  const b = (  c        & 0xff) / 255;
+  const k = 1 - Math.max(r, g, b);
+  if (k >= 1) return [0, 0, 0, 1];
+  return [
+    (1 - r - k) / (1 - k),
+    (1 - g - k) / (1 - k),
+    (1 - b - k) / (1 - k),
+    k,
+  ];
+}
+
+// Decode a PNG buffer and return a raw DeviceCMYK XObject reference for pdfkit.
+function pngToCmykXObject(pngBuf, doc, pageW, pageH) {
+  const png  = PNG.sync.read(pngBuf);
+  const imgW = png.width;
+  const imgH = png.height;
+  const src  = png.data; // RGBA, 4 bytes/pixel
+  const cmyk = Buffer.allocUnsafe(imgW * imgH * 4);
+
+  for (let i = 0, j = 0; i < src.length; i += 4, j += 4) {
+    // Composite pixel over white (handle transparency).
+    const a  = src[i + 3] / 255;
+    const r  = src[i    ] / 255 * a + (1 - a);
+    const g  = src[i + 1] / 255 * a + (1 - a);
+    const b  = src[i + 2] / 255 * a + (1 - a);
+    const k  = 1 - Math.max(r, g, b);
+    if (k >= 1) { cmyk[j]=0; cmyk[j+1]=0; cmyk[j+2]=0; cmyk[j+3]=255; continue; }
+    cmyk[j    ] = Math.round((1 - r - k) / (1 - k) * 255);
+    cmyk[j + 1] = Math.round((1 - g - k) / (1 - k) * 255);
+    cmyk[j + 2] = Math.round((1 - b - k) / (1 - k) * 255);
+    cmyk[j + 3] = Math.round(k * 255);
+  }
+
+  const compressed = zlib.deflateSync(cmyk);
+  const xobj = doc.ref({
+    Type:             'XObject',
+    Subtype:          'Image',
+    Width:            imgW,
+    Height:           imgH,
+    ColorSpace:       'DeviceCMYK',
+    BitsPerComponent: 8,
+    Filter:           'FlateDecode',
+    Length:           compressed.length,
+  });
+  xobj.write(compressed);
+  xobj.end();
+  return { ref: xobj, imgW, imgH };
+}
+
+// Assemble vector PDF: CMYK background images + PDF text layers.
+ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsList, spec) => {
+  // Collect logs to return to renderer (they appear in DevTools console, not terminal).
+  const logs = [];
+  const plog = (...a) => { const m = a.join(' '); console.log(m); logs.push(m); };
+  const pwarn = (...a) => { const m = '[WARN] ' + a.join(' '); console.warn(m); logs.push(m); };
+  const perr = (...a) => { const m = '[ERR] ' + a.join(' '); console.error(m); logs.push(m); };
+
+  const { wIn = 6, hIn = 8.5, canvasW = 794 } = spec || {};
+  const PT_PER_IN = 72;
+  const pageW = wIn * PT_PER_IN;
+  const pageH = hIn * PT_PER_IN;
+  const scale = pageW / canvasW; // canvas pixels → PDF points
+
+  fs.mkdirSync(dir, { recursive: true });
+  const destPath = path.join(dir, 'brochure-print.pdf');
+
+  const doc = new PDFDocument({
+    autoFirstPage: false,
+    margin: 0,
+    info: { Title: 'Arangetram Brochure', Creator: 'Arangetram Editor' },
+  });
+
+  // Pre-load fonts into pdfkit (register each family/style combination found).
+  const registeredFonts = new Map(); // key → pdfkit font name
+  const weights = ['400', '700'];
+  plog(`[PDF fonts] families to load: ${JSON.stringify(googleFontsList)}`);
+  for (const family of (googleFontsList || [])) {
+    for (const w of weights) {
+      for (const italic of [false, true]) {
+        plog(`[PDF fonts] fetching: ${family} w=${w} italic=${italic}`);
+        let buf = null;
+        try { buf = await fetchGoogleFont(family, w, italic); } catch (e) { pwarn(`[PDF fonts] fetch threw: ${e && e.message}`); }
+        if (!buf) { pwarn(`[PDF fonts] SKIP (no buf): ${family} w=${w} italic=${italic}`); continue; }
+        const key = `${family}|${w}|${italic ? 'i' : 'n'}`;
+        const regName = `GF_${family.replace(/\s+/g, '_')}_${w}${italic ? 'i' : 'n'}`;
+        try {
+          doc.registerFont(regName, buf);
+          registeredFonts.set(key, regName);
+          plog(`[PDF fonts] OK: ${regName} (${buf.length} bytes)`);
+        } catch (e) {
+          perr(`[PDF fonts] REGISTER ERROR: ${regName} — ${e && e.message}`);
+        }
+      }
+    }
+  }
+  plog(`[PDF fonts] done — ${registeredFonts.size} variants registered, starting page render…`);
+
+  // Pre-register Noto Sans Tamil if any text object contains Tamil Unicode characters (U+0B80–U+0BFF).
+  const TAMIL_RE = /[஀-௿]/;
+  let tamilFontName = null;
+  const hasTamilText = (pdfSections || []).some(s => (s.textData || []).some(t => TAMIL_RE.test(t.text || '')));
+  if (hasTamilText) {
+    plog(`[PDF fonts] Tamil text detected — fetching Noto Sans Tamil`);
+    try {
+      const tamilBuf = await fetchGoogleFont('Noto Sans Tamil', '400', false, 0x0B89);
+      if (tamilBuf) {
+        doc.registerFont('NotoSansTamil', tamilBuf);
+        tamilFontName = 'NotoSansTamil';
+        plog(`[PDF fonts] Noto Sans Tamil registered (${tamilBuf.length} bytes)`);
+      } else {
+        pwarn(`[PDF fonts] Noto Sans Tamil fetch returned null — Tamil glyphs will be missing`);
+      }
+    } catch (e) {
+      pwarn(`[PDF fonts] Noto Sans Tamil fetch failed: ${e && e.message}`);
+    }
+  }
+
+  function getPdfFont(family, weight, italic) {
+    const isBold = weight === 'bold' || parseInt(weight) >= 700;
+    if (SYSTEM_FONT_MAP[family]) {
+      const m = SYSTEM_FONT_MAP[family];
+      if (isBold && italic) return m.bi;
+      if (isBold)           return m.b;
+      if (italic)           return m.i;
+      return m.n;
+    }
+    const wNorm = isBold ? '700' : '400';
+    const key = `${family}|${wNorm}|${italic ? 'i' : 'n'}`;
+    return registeredFonts.get(key) || registeredFonts.get(`${family}|400|n`) || 'Helvetica';
+  }
+
+  const ws = fs.createWriteStream(destPath);
+  doc.pipe(ws);
+
+  for (const { bgDataUrl, textData } of (pdfSections || [])) {
+    doc.addPage({ size: [pageW, pageH], margin: 0 });
+
+    if (bgDataUrl) {
+      const b64 = bgDataUrl.split(',')[1];
+      if (b64) {
+        try { doc.image(Buffer.from(b64, 'base64'), 0, 0, { width: pageW, height: pageH }); }
+        catch (e) { perr(`[PDF main] bg image failed: ${e && e.message}`); }
+      }
+    }
+
+    plog(`[PDF main] page — textData count: ${(textData || []).length}`);
+    for (const t of (textData || [])) {
+      const x  = t.left * scale;
+      // Clamp to page top — canvas objects positioned ≤1px above the section render
+      // at slightly negative PDF y (e.g. y≈-0.27 pts), which pdfkit clips silently.
+      const y  = Math.max(0, t.top * scale);
+      const fs = t.fontSize * scale;
+
+      plog(`[PDF main]   text "${(t.text||'').slice(0,30).replace(/\n/g,'\\n')}" x=${x.toFixed(1)} y=${y.toFixed(1)} fs=${fs.toFixed(1)} font=${t.fontFamily} fill=${t.fill}`);
+
+      if (!Number.isFinite(x) || !Number.isFinite(y) || fs < 0.5) {
+        pwarn(`[PDF main]   SKIP bad coords/size x=${x} y=${y} fs=${fs}`);
+        continue;
+      }
+      if (y >= pageH) {
+        pwarn(`[PDF main]   SKIP off-page y=${y.toFixed(1)} >= pageH=${pageH}`);
+        continue;
+      }
+
+      const fontName  = (tamilFontName && TAMIL_RE.test(t.text || ''))
+                        ? tamilFontName
+                        : getPdfFont(t.fontFamily, t.fontWeight, t.fontStyle === 'italic');
+      const fillColor = (typeof t.fill === 'string' && t.fill) ? t.fill : '#000000';
+      const textW     = Math.max(1, t.width * scale);
+      let   alignOpt  = t.textAlign || 'left';
+      if (alignOpt === 'justify-left') alignOpt = 'justify';
+
+      plog(`[PDF main]     → font=${fontName} color=${fillColor} w=${textW.toFixed(1)}`);
+
+      try {
+        doc.save();
+        if (t.angle) {
+          const cx = (t.left + t.width  / 2) * scale;
+          const cy = (t.top  + t.height / 2) * scale;
+          doc.translate(cx, cy).rotate(-t.angle).translate(-cx, -cy);
+        }
+        if (t.opacity < 1) doc.opacity(t.opacity);
+        doc.fillColor(fillColor);
+        doc.font(fontName).fontSize(fs);
+        if (t.text) {
+          if (t.textLines && t.textLines.length) {
+            // Line-by-line with explicit y coordinates and lineBreak:false.
+            // This is the only approach that prevents pdfkit from re-flowing text
+            // with its own metrics (which differ from Canvas2D/Fabric) and from
+            // inserting extra lines when there is insufficient space between text boxes.
+            // Each line is placed at the exact y Fabric computed; pdfkit never advances
+            // the cursor on its own.
+            const lines = t.textLines;
+            const lineH = fs * (t.lineHeight || 1.16);
+            const isJust = alignOpt === 'justify';
+            let rendered = 0;
+            for (let li = 0; li < lines.length; li++) {
+              // Trim: Fabric preserves leading/trailing spaces from the original text
+              // (e.g. "\n Para two") which pdfkit renders as visible space characters.
+              const line  = lines[li].trim();
+              const lineY = y + li * lineH;
+              if (lineY >= pageH) break; // Beyond page — skip; never let pdfkit auto-add pages.
+              if (!line) { rendered++; continue; } // Empty paragraph line — occupy the slot, skip render.
+
+              // isParaEnd: true for the last wrapped line of each paragraph and for the
+              // very last line of the text box. These must NOT be justified — a para-end
+              // line should stay left-aligned so it doesn't stretch to fill the width.
+              const isParaEnd = t.isParaEnd ? t.isParaEnd[li] : (li === lines.length - 1);
+
+              if (isJust && !isParaEnd && line.includes(' ')) {
+                // Non-para-end justify: distribute surplus width across word gaps.
+                // doc.widthOfString uses fontkit metrics; small deviations from Canvas2D
+                // are acceptable — positions are driven by explicit lineY, not re-flow.
+                const naturalW    = doc.widthOfString(line);
+                const wordGaps    = line.split(' ').length - 1;
+                const wordSpacing = wordGaps > 0 ? Math.max(0, (textW - naturalW) / wordGaps) : 0;
+                doc.text(line, x, lineY, { lineBreak: false, wordSpacing });
+              } else {
+                // Para-end or non-justify: left-align the last line of each paragraph.
+                const lineAlign = (isJust && isParaEnd) ? 'left' : alignOpt;
+                doc.text(line, x, lineY, { width: textW, lineBreak: false, align: lineAlign });
+              }
+              rendered++;
+            }
+            plog(`[PDF main]     ✓ rendered ${rendered}/${lines.length} line(s)`);
+          } else {
+            // Fallback: pdfkit re-flow when textLines unavailable (should not happen
+            // in normal operation — live Fabric objects always have textLines).
+            const remainingH = Math.max(1, pageH - y);
+            doc.text(t.text, x, y, { width: textW, height: remainingH, align: alignOpt, lineBreak: true });
+            plog(`[PDF main]     ✓ rendered (reflow fallback)`);
+          }
+        } else {
+          pwarn(`[PDF main]     SKIP empty text`);
+        }
+        doc.restore();
+      } catch (_err) {
+        perr(`[PDF main]   ERROR: ${_err && _err.message}`);
+        try { doc.restore(); } catch {}
+      }
+    }
+  }
+
+  doc.end();
+  return new Promise((resolve, reject) => {
+    ws.on('finish', () => resolve({ destPath, logs }));
+    ws.on('error', reject);
+  });
+});
+
+// Two-up PNG: sections 4 + 5 side-by-side on 12"×8.5" landscape (3600×2550 @ 300 DPI).
+// Each slot is 1800×2550px = exactly 6"×8.5" — matches the editor's per-section canvas.
+// No CMYK conversion — original RGB colors are preserved exactly.
+ipcMain.handle('export:twoUp', async (_e, dir, images) => {
+  const OUT_W = 3600, OUT_H = 2550;
+  const halfW = OUT_W >> 1;  // 1800 px per slot (6" × 300 DPI)
+
+  // White background in BGRA (nativeImage.createFromBitmap requires BGRA)
+  const outBuf = Buffer.alloc(OUT_W * OUT_H * 4, 255);
+
+  for (let side = 0; side < Math.min((images || []).length, 2); side++) {
+    const { dataUrl } = images[side];
+    const ni   = nativeImage.createFromDataURL(dataUrl);
+    const bgra = ni.getBitmap();  // BGRA, 4 bytes/px
+    const { width: imgW, height: imgH } = ni.getSize();
+
+    const xOff     = side * halfW;
+    // yOff: residual gap if height doesn't hit OUT_H exactly due to rounding
+    const yOff     = Math.max(0, Math.floor((OUT_H - imgH) / 2));
+    // center-crop horizontally when rendered width exceeds the 1650px slot
+    const colStart = Math.max(0, Math.floor((imgW - halfW) / 2));
+    const copyW    = Math.min(imgW - colStart, halfW);
+
+    for (let row = 0; row < imgH && (yOff + row) < OUT_H; row++) {
+      const outRowBase = (yOff + row) * OUT_W;
+      const srcRowBase =       row    * imgW;
+      for (let col = 0; col < copyW; col++) {
+        const si = (srcRowBase + colStart + col) << 2;
+        const di = (outRowBase + xOff    + col) << 2;
+        outBuf[di]     = bgra[si];      // B
+        outBuf[di + 1] = bgra[si + 1];  // G
+        outBuf[di + 2] = bgra[si + 2];  // R
+        // outBuf[di + 3] stays 255 (pre-filled)
+      }
+    }
+  }
+
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const destPath = path.join(dir, 'brochure-twoup.png');
+  const outNI = nativeImage.createFromBitmap(outBuf, { width: OUT_W, height: OUT_H, scaleFactor: 1.0 });
+  fs.writeFileSync(destPath, outNI.toPNG());
+  return { destPath };
 });
 
 ipcMain.handle('fs:readFile', async (_e, filePath) => {

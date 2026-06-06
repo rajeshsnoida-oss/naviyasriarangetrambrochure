@@ -353,6 +353,7 @@ function initCanvas() {
     preserveObjectStacking: true,
     selection: true,
   });
+  canvas.on('after:render',        drawSafeMarginGuide);
   canvas.on('selection:created',  updateToolbar);
   canvas.on('selection:updated',  updateToolbar);
   canvas.on('selection:cleared',  updateToolbar);
@@ -996,8 +997,9 @@ function bindToolbar() {
   document.getElementById('btn-save').addEventListener('click',         () => saveProject(false));
   document.getElementById('btn-preview').addEventListener('click',      previewHTML);
   document.getElementById('btn-export').addEventListener('click',       exportHTML);
-  document.getElementById('btn-export-print').addEventListener('click', exportPrint);
-  document.getElementById('btn-export-pdf').addEventListener('click',   exportPDF);
+  document.getElementById('btn-export-print').addEventListener('click',  exportPrint);
+  document.getElementById('btn-export-pdf').addEventListener('click',    exportPDF);
+  document.getElementById('btn-export-twoup').addEventListener('click',  exportTwoUp);
 }
 
 function applyText(prop, val) {
@@ -1651,7 +1653,28 @@ function renderSectionToDataUrl(sec, multiplier) {
 const PRINT_DPI  = 300;
 const PRINT_W_IN = 6.00;
 const PRINT_H_IN = 8.50;
-const PRINT_MULTIPLIER = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 1800 / 794 ≈ 2.267
+const PRINT_MULTIPLIER  = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 1800 / 794 ≈ 2.267
+// 0.25 inch safe margin in canvas pixels (editor guide only — never exported)
+const SAFE_MARGIN_PX = Math.round(0.25 * CANVAS_W / PRINT_W_IN); // ≈ 33px
+
+function drawSafeMarginGuide() {
+  const zoom = canvas.getZoom();
+  const dpr  = window.devicePixelRatio || 1;
+  const h    = canvas.getHeight() / zoom; // logical section height in px
+  const ctx  = canvas.getContext('2d');
+  ctx.save();
+  // Reset Fabric's viewport transform but keep retina DPR scaling so our
+  // coordinates stay in CSS pixels (1 unit = dpr device pixels on HiDPI).
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const m = SAFE_MARGIN_PX * zoom;
+  const W = CANVAS_W * zoom;
+  const H = h * zoom;
+  ctx.strokeStyle = 'rgba(255, 100, 0, 0.7)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(m, m, W - 2 * m, H - 2 * m);
+  ctx.restore();
+}
 
 async function _renderAllSections(onProgress) {
   clearTimeout(_recoveryTimer);
@@ -1676,15 +1699,235 @@ async function exportPrint() {
   setStatus(`PNG export: ${imageFiles.length} images @ ${PRINT_DPI} DPI (2550×1800px) → ${destDir}`);
 }
 
+// Render a section for vector PDF export: background PNG (no text) + text data.
+function renderSectionForPdf(sec, multiplier) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('canvas');
+    el.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+    document.body.appendChild(el);
+
+    const fc = new fabric.StaticCanvas(el, {
+      width: CANVAS_W, height: sec.height, enableRetinaScaling: false,
+    });
+    const cleanup = () => { try { fc.dispose(); } catch {} el.remove(); };
+
+    const doExport = () => {
+      // Extract text data from sec.objects JSON for positions/styles (more reliable than
+      // live Fabric objects which can silently drop complex styles like gradients/cutouts).
+      // textLines is NOT serialised in JSON — it's a computed Fabric property — so we
+      // build a positional lookup from live canvas objects to get the actual wrapped lines.
+      const allObjs  = sec.objects || [];
+      const textObjs = allObjs.filter(o => o.type === 'textbox' || o.type === 'i-text');
+      console.log(`[PDF] section "${sec.name}": total objects=${allObjs.length}, text objects=${textObjs.length}`);
+
+      // Live Fabric text objects are loaded in the same order as sec.objects JSON entries.
+      const liveTextObjs = fc.getObjects().filter(o => o.type === 'textbox' || o.type === 'i-text');
+
+      // For each textLines array, compute which indices are paragraph-ending lines.
+      // A paragraph ends at the last wrapped line before an explicit \n (or the very last line).
+      // These lines must NOT be fully justified — they stay left-aligned.
+      function computeParaEndFlags(text, textLines) {
+        const flags = new Array(textLines.length).fill(false);
+        if (!textLines.length) return flags;
+        flags[textLines.length - 1] = true; // Last line is always a paragraph end.
+        const paras = (text || '').split('\n');
+        if (paras.length <= 1) return flags; // Single paragraph — only last line is end.
+        let li = 0;
+        for (let pi = 0; pi < paras.length - 1 && li < textLines.length; pi++) {
+          const target = paras[pi].replace(/\s+/g, ' ').trim();
+          let acc = '';
+          while (li < textLines.length) {
+            acc = acc ? acc + ' ' + textLines[li] : textLines[li];
+            li++;
+            // Stop accumulating when accumulated text matches the paragraph (or overshoots).
+            if (acc.replace(/\s+/g, ' ').trim() === target || acc.length >= target.length) {
+              flags[li - 1] = true;
+              break;
+            }
+          }
+        }
+        return flags;
+      }
+
+      const textData = textObjs.map((o, i) => {
+          const scaleX = o.scaleX || 1, scaleY = o.scaleY || 1;
+          const w = (o.width || 0) * scaleX, h = (o.height || 0) * scaleY;
+          const ox = o.originX || 'left', oy = o.originY || 'top';
+          const left = ox === 'center' ? (o.left || 0) - w / 2
+                     : ox === 'right'  ? (o.left || 0) - w
+                     :                   (o.left || 0);
+          const top  = oy === 'center' ? (o.top  || 0) - h / 2
+                     : oy === 'bottom' ? (o.top  || 0) - h
+                     :                   (o.top  || 0);
+          // textLines from the live Fabric object — computed by Canvas2D, matches the editor.
+          const live = liveTextObjs[i];
+          const textLines = (live && Array.isArray(live.textLines) && live.textLines.length)
+                            ? live.textLines.map(String)
+                            : null;
+          const isParaEnd = textLines ? computeParaEndFlags(o.text || '', textLines) : null;
+          const entry = {
+            left:       Math.round(left),
+            top:        Math.round(top),
+            width:      Math.round(w),
+            height:     Math.round(h),
+            angle:      o.angle       || 0,
+            fontFamily: o.fontFamily  || 'Georgia',
+            fontSize:   Math.round((o.fontSize || 16) * scaleY),
+            fontWeight: o.fontWeight  || 'normal',
+            fontStyle:  o.fontStyle   || 'normal',
+            fill:       typeof o.fill === 'string' ? o.fill : '#000000',
+            textAlign:  (o.textAlign  || 'left').replace('justify-left', 'justify'),
+            opacity:    o.opacity != null ? o.opacity : 1,
+            text:       o.text        || '',
+            textLines,
+            isParaEnd,
+            lineHeight: o.lineHeight  || 1.16,
+          };
+          console.log(`[PDF]   text "${entry.text.slice(0,40).replace(/\n/g,'\\n')}" font=${entry.fontFamily} size=${entry.fontSize} fill=${entry.fill} left=${entry.left} top=${entry.top} w=${entry.width} lines=${textLines ? textLines.length : 'null'}`);
+          return entry;
+        });
+
+      // Hide text in the StaticCanvas for the background-only PNG.
+      fc.getObjects().forEach(obj => {
+        if (obj.type === 'textbox' || obj.type === 'i-text') obj.visible = false;
+      });
+
+      fc.renderAll();
+      let bgDataUrl;
+      try { bgDataUrl = fc.toDataURL({ format: 'png', multiplier }); }
+      catch (e) { cleanup(); reject(e); return; }
+      cleanup();
+      resolve({ bgDataUrl, textData });
+    };
+
+    const afterBgColor = () => {
+      if (sec.bgImage) {
+        fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec, fc, doExport), { crossOrigin: 'anonymous' });
+      } else {
+        doExport();
+      }
+    };
+
+    const applyBg = () => {
+      const type = sec.bgType || 'solid';
+      if (type === 'linear' || type === 'radial') {
+        const grad = makeFabricGradient(type, sec.bgGrad1 || '#ffffff', sec.bgGrad2 || '#000000',
+                                        sec.bgGradDir || 'to bottom', CANVAS_W, sec.height);
+        fc.setBackgroundColor(grad, afterBgColor);
+      } else if (type === 'texture') {
+        const svgUrl = makeTextureSVG(sec.bgTexture || 'dots', sec.bgTexFg || '#c9a84c', sec.bgTexBg || '#5a0a2e');
+        fabric.Image.fromURL(svgUrl, img => {
+          const pat = new fabric.Pattern({ source: img.getElement(), repeat: 'repeat' });
+          fc.setBackgroundColor(pat, afterBgColor);
+        });
+      } else {
+        fc.setBackgroundColor(sec.bg || '#ffffff', afterBgColor);
+      }
+    };
+
+    const afterLoad = () => {
+      const fontLoads = [];
+      fc.getObjects().forEach(obj => {
+        if ((obj.type === 'textbox' || obj.type === 'i-text') && obj.fontFamily) {
+          ['400', '700', 'italic 400'].forEach(v =>
+            fontLoads.push(document.fonts.load(`${v} 16px "${obj.fontFamily}"`).catch(() => {}))
+          );
+        }
+      });
+      Promise.all(fontLoads).then(() => {
+        fc.getObjects().forEach(obj => {
+          if (obj.type === 'textbox' || obj.type === 'i-text') { obj.dirty = true; obj.initDimensions(); }
+        });
+        applyBg();
+      });
+    };
+
+    if (sec.objects && sec.objects.length) {
+      fc.loadFromJSON({ version: '5.3.0', objects: sec.objects }, afterLoad);
+    } else {
+      afterLoad();
+    }
+  });
+}
+
 async function exportPDF() {
   const destDir = await window.editorAPI.exportDir();
   if (!destDir) return;
-  const files = await _renderAllSections((n, t) => setStatus(`Rendering section ${n}/${t} for CMYK PDF…`));
-  setStatus(`Assembling CMYK PDF…`);
-  const destPath = await window.editorAPI.exportToPdf(
-    destDir, files, { wIn: PRINT_W_IN, hIn: PRINT_H_IN, dpi: PRINT_DPI }
-  );
-  setStatus(`PDF export: ${files.length} page${files.length !== 1 ? 's' : ''}, CMYK @ ${PRINT_DPI} DPI → ${destPath}`);
+
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
+
+  // Collect all Google Fonts used across sections (for main process to download).
+  const allFonts = new Set();
+  sections.forEach(sec => {
+    (sec.objects || []).forEach(obj => {
+      if ((obj.type === 'textbox' || obj.type === 'i-text') && obj.fontFamily) {
+        allFonts.add(obj.fontFamily);
+      }
+    });
+  });
+  // Also include custom fonts; filter to only Google-downloadable ones.
+  const googleFontsList = [...allFonts].filter(f => GOOGLE_FONTS.has(f) ||
+    customFonts.some(cf => cf.name === f));
+
+  const total = sections.length;
+  const pdfSections = [];
+  for (let i = 0; i < total; i++) {
+    setStatus(`Rendering section ${i + 1}/${total} for PDF…`);
+    const result = await renderSectionForPdf(sections[i], PRINT_MULTIPLIER);
+    pdfSections.push(result);
+  }
+
+  setStatus(`Assembling PDF with vector text…`);
+  console.log('[PDF] calling exportToPdfVector — sections:', pdfSections.length, 'fonts:', googleFontsList);
+  let ipcResult;
+  try {
+    ipcResult = await window.editorAPI.exportToPdfVector(
+      destDir, pdfSections, googleFontsList, { wIn: PRINT_W_IN, hIn: PRINT_H_IN, dpi: PRINT_DPI, canvasW: CANVAS_W }
+    );
+  } catch (err) {
+    console.error('[PDF] exportToPdfVector IPC FAILED:', err && err.message, err);
+    setStatus(`PDF export failed: ${err && err.message}`);
+    return;
+  }
+  // Main process returns { destPath, logs } so its logs appear in DevTools.
+  const { destPath, logs: mainLogs } = ipcResult || {};
+  (mainLogs || []).forEach(l => console.log('[main]', l));
+  setStatus(`PDF export: ${pdfSections.length} page${pdfSections.length !== 1 ? 's' : ''} → ${destPath || '(no path)'}`);
+}
+
+/* Two-Up PNG: sections 4 + 5 side-by-side on 12"×8.5" landscape at 300 DPI.
+   Each section fills its 6"×8.5" slot exactly (1800×2550px) — no crop, no borders. */
+async function exportTwoUp() {
+  if (sections.length < 5) {
+    setStatus('Two-Up export needs at least 5 sections (sections 4 & 5 will be combined side-by-side).');
+    return;
+  }
+  const destDir = await window.editorAPI.exportDir();
+  if (!destDir) return;
+
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
+
+  // Scale each section so its height fills 8.5" @ 300 DPI = 2550px exactly.
+  const TWO_UP_H = 2550;
+  const mult3 = TWO_UP_H / (sections[3].height || 1124);
+  const mult4 = TWO_UP_H / (sections[4].height || 1124);
+
+  setStatus('Rendering section 4 for Two-Up…');
+  const url3 = await renderSectionToDataUrl(sections[3], mult3);
+  setStatus('Rendering section 5 for Two-Up…');
+  const url4 = await renderSectionToDataUrl(sections[4], mult4);
+
+  setStatus('Building Two-Up PNG…');
+  let result;
+  try {
+    result = await window.editorAPI.exportTwoUp(destDir, [{ dataUrl: url3 }, { dataUrl: url4 }]);
+  } catch (err) {
+    setStatus('Two-Up export failed: ' + (err && err.message));
+    return;
+  }
+  setStatus('Two-Up PNG: ' + (result && result.destPath ? result.destPath : 'done'));
 }
 
 /* Fabric stores left/top at the object's originX/originY point.
