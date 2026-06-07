@@ -705,6 +705,92 @@
 - **Consequences:** Background images never bleed between sections. One additional Fabric
   call per section navigation for bgImage-less sections (negligible cost).
 
+## D-052 — PDF text: line-by-line rendering with `lineBreak:false`
+
+- **Date:** 2026-06-05
+- **Status:** decided
+- **Context:** pdfkit paragraph-group approach (using `lineGap`) caused cumulative spacing
+  errors; pdfkit re-flowed text within groups, making alignment completely mismatched vs the
+  editor. `lineGap` also persists as an instance variable between calls, compounding drift.
+- **Decision:** Render each Fabric `textLine` individually at exact `(x, y)` coordinates using
+  pdfkit `doc.text()` with `lineBreak:false`. Positions are derived from Fabric's `textLines`
+  array × the PDF scale factor (`pageW / CANVAS_W`).
+- **Why:** Eliminates pdfkit re-flow entirely. `lineBreak:false` renders at the exact coordinate
+  with no cursor advance, matching Canvas2D line metrics. The paragraph-group approach was
+  fundamentally incompatible with Fabric's computed line positions.
+- **Consequences:** `textLines` must be read from live Fabric objects after `loadFromJSON` —
+  it is a computed property, not serialised in JSON. Requires `computeParaEndFlags()` to
+  detect paragraph-ending lines and suppress justify on them (pdfkit would otherwise
+  over-space the last word of each paragraph).
+
+## D-053 — Google Fonts TTF fetch: v1/v2 fallback + unicode-range subset picking
+
+- **Date:** 2026-06-05
+- **Status:** decided
+- **Context:** pdfkit/fontkit requires TTF/OTF for reliable glyph embedding. Google Fonts v2
+  returns WOFF2 by default, which produced empty glyphs in the PDF. Noto Sans Tamil also
+  failed: the first `@font-face` block in the v2 CSS response covered Latin only (21 KB file),
+  so the Tamil character (உ, U+0B89) rendered as a tofu box.
+- **Decision:** Try the v1 API first (returns TTF directly for common fonts). Fall back to v2
+  with an old IE User-Agent (`Mozilla/4.0 (compatible; MSIE 8.0)`) which forces a TTF response
+  for scripts absent from v1. Parse all `@font-face` blocks by `unicode-range` and select the
+  block whose range covers the target codepoint.
+- **Why:** v1 is reliable for Latin fonts; the IE UA trick gets TTF from v2 for non-Latin
+  scripts; unicode-range parsing is the only correct way to select the right subset file when
+  multiple blocks exist (Latin, Tamil, Devanagari, etc. are separate files in v2).
+- **Consequences:** Cache key uses `.ttf` extension; any stale `.woff2` cache files must be
+  deleted manually. `fetchGoogleFont()` accepts an optional `targetCodepoint` parameter
+  used only for non-Latin scripts.
+
+## D-054 — Two-Up export: PNG over CMYK TIFF
+
+- **Date:** 2026-06-05
+- **Status:** decided
+- **Context:** Initial Two-Up implementation used a custom uncompressed TIFF encoder with
+  per-pixel BGRA→CMYK conversion. Colors were noticeably dull compared to the editor because
+  the naive RGB→CMYK formula shifts perceived colour (especially saturated hues and dark tones).
+- **Decision:** Output plain PNG via `nativeImage.createFromBitmap().toPNG()`. Direct BGRA
+  pixel copy into the output buffer — zero colour conversion.
+- **Why:** PNG is lossless, opens in any viewer/editor, and preserves exact screen colours.
+  Photo labs accept high-res PNG and apply ICC-profile CMYK conversion themselves at output
+  time, which is more accurate than a software formula. Eliminates ~70 lines of TIFF encoder
+  code and the BGRA→CMYK pixel loop.
+- **Consequences:** Output is RGB not CMYK. A professional print shop RIP handles CMYK
+  conversion with proper ICC profiles. For home/consumer printing, PNG is superior anyway.
+
+## D-055 — Two-Up: height-filling multiplier per section
+
+- **Date:** 2026-06-05
+- **Status:** decided
+- **Context:** A fixed `TWO_UP_MULTIPLIER = 1650/794 ≈ 2.078` (width-filling for an 11"×8.5"
+  layout) left 107px white borders top and bottom. Sections are designed for 6"×8.5" but the
+  11"×8.5" output gave only 5.5"-wide slots; at the width-filling scale the rendered height was
+  ~2336px, 214px short of the 2550px output height.
+- **Decision:** Compute per-section multiplier as `2550 / sec.height` so each section renders
+  to exactly 2550px tall. Any width overflow beyond the slot width is center-cropped by the
+  compositor (`colStart = floor((imgW - halfW) / 2)`).
+- **Why:** Filling the full 8.5" height is visually essential for a print layout; white top/bottom
+  borders look unprofessional. A slight horizontal crop is less damaging than vertical whitespace.
+- **Consequences:** Width at this scale is ~1801px per section when height is 1124px, requiring
+  center-crop when the slot is narrower. Fully resolved by D-056, which changes the layout to
+  12"×8.5" so the slot width matches exactly.
+
+## D-056 — Two-Up: 12"×8.5" layout over 11"×8.5"
+
+- **Date:** 2026-06-05
+- **Status:** decided
+- **Context:** After D-055 (height-filling multiplier), each section rendered to ~1801px wide
+  at the height-filling scale. The 11"×8.5" layout gave only 1650px (5.5") per slot, so ~150px
+  was being center-cropped per section, visibly cutting off content at both edges.
+- **Decision:** Change output dimensions to 12"×8.5" (3600×2550px at 300 DPI), giving each
+  slot exactly 1800px = 6"×300 DPI — matching the editor's per-section canvas proportions.
+- **Why:** Eliminates the horizontal crop entirely. The slot now matches the section's designed
+  6"×8.5" dimensions exactly. The residual 1px rounding difference (1801 vs 1800) is handled
+  gracefully by the existing center-crop guard.
+- **Consequences:** 12"×8.5" is not a standard photo print size (common sizes: 4×6, 5×7, 8×10,
+  11×17). The print shop or customer must order a custom-size print. Output filename is
+  `brochure-twoup.png`.
+
 <!--
 Template for new entries:
 
