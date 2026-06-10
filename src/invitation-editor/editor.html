@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitation Page Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Philosopher:ital,wght@0,400;0,700;1,400&family=Noto+Sans+Tamil&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --toolbar-h: 46px;
+      --panel-w: 230px;
+      --bg:        #111122;
+      --panel-bg:  #1c1c30;
+      --border:    #2e2e4a;
+      --accent:    #c9a84c;
+      --text:      #dde0f0;
+      --text-dim:  #777a99;
+      --btn-bg:    #26263d;
+      --btn-hover: #32324f;
+      --danger:    #b03030;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Toolbar ─────────────────────────── */
+    #toolbar {
+      height: var(--toolbar-h);
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 0 8px;
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+    .tb-btn {
+      background: var(--btn-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 4px 9px; cursor: pointer; font-size: 12px; white-space: nowrap;
+    }
+    .tb-btn:hover { background: var(--btn-hover); }
+    .tb-btn.accent { background: var(--accent); color: #1a0a00; border-color: var(--accent); font-weight: 600; }
+    .tb-btn.danger { background: var(--danger); border-color: var(--danger); }
+    .tb-btn.active { background: var(--accent); color: #1a0a00; }
+    .tb-sep { width: 1px; height: 26px; background: var(--border); margin: 0 3px; flex-shrink: 0; }
+    .tb-label { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+    select.tb-ctrl, input[type=number].tb-ctrl {
+      background: var(--btn-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 3px 5px; font-size: 12px;
+    }
+    input[type=number].tb-ctrl { width: 50px; }
+
+    /* ── Layout ──────────────────────────── */
+    #layout { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Panels ──────────────────────────── */
+    .panel {
+      width: var(--panel-w);
+      background: var(--panel-bg);
+      display: flex; flex-direction: column;
+      overflow-y: auto; flex-shrink: 0;
+    }
+    #left-panel  { border-right: 1px solid var(--border); }
+    #right-panel { border-left:  1px solid var(--border); }
+
+    .psec { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .psec-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--text-dim); margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .prow { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+    .prow label { font-size: 11px; color: var(--text-dim); min-width: 56px; }
+    .pinput {
+      flex: 1; background: var(--btn-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 3px 6px; font-size: 12px;
+    }
+    .pinput:focus { outline: 1px solid var(--accent); }
+
+    /* Link list */
+    .link-item {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 0; font-size: 11px; border-bottom: 1px solid var(--border);
+    }
+    .link-item:last-child { border-bottom: none; }
+    .link-lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ico-btn {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; padding: 1px 4px; border-radius: 3px; font-size: 11px;
+    }
+    .ico-btn:hover { color: var(--danger); }
+
+    /* ── Canvas area ─────────────────────── */
+    #canvas-area {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start;
+      overflow: auto; padding: 24px; background: #0a0a14;
+    }
+    #canvas-wrap {
+      box-shadow: 0 4px 40px rgba(0,0,0,0.7);
+      position: relative; flex-shrink: 0;
+    }
+
+    /* ── Status bar ──────────────────────── */
+    #statusbar {
+      height: 22px; padding: 0 10px; font-size: 11px;
+      color: var(--text-dim); display: flex; align-items: center;
+      background: var(--panel-bg); border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ── Modal ───────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--panel-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px; min-width: 300px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }
+    .modal-title { font-weight: 600; margin-bottom: 14px; color: var(--accent); }
+    .modal-btns { display: flex; gap: 8px; margin-top: 14px; }
+    .modal-btns .tb-btn { flex: 1; text-align: center; }
+  </style>
+</head>
+<body>
+
+<!-- ── Toolbar ─────────────────────────────────────────────────────── -->
+<header id="toolbar">
+  <button class="tb-btn" onclick="addText()">＋ Text</button>
+  <button class="tb-btn" onclick="addImage()">＋ Image</button>
+  <button class="tb-btn" onclick="duplicateObj()">⧉</button>
+  <button class="tb-btn danger" onclick="deleteObj()">✕</button>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Font</span>
+  <select class="tb-ctrl" id="tb-font" onchange="applyFont()">
+    <option>Arial</option>
+    <option>Cinzel</option>
+    <option>Georgia</option>
+    <option>Philosopher</option>
+    <option>Palatino Linotype</option>
+    <option>Times New Roman</option>
+    <option>Trebuchet MS</option>
+    <option>Noto Sans Tamil</option>
+  </select>
+  <input type="number" class="tb-ctrl" id="tb-size" value="36" min="6" max="300" onchange="applyFontSize()">
+  <button class="tb-btn" id="btn-bold"   onclick="toggleBold()"><b>B</b></button>
+  <button class="tb-btn" id="btn-italic" onclick="toggleItalic()"><i>I</i></button>
+  <input type="color" id="tb-color" value="#ffffff" title="Text / Fill color"
+         onchange="applyColor()" style="width:26px;height:26px;border:none;cursor:pointer;background:none;padding:0;">
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Align</span>
+  <button class="tb-btn" onclick="setAlign('left')">⬤←</button>
+  <button class="tb-btn" onclick="setAlign('center')">⊙</button>
+  <button class="tb-btn" onclick="setAlign('right')">→⬤</button>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Opacity</span>
+  <input type="range" id="tb-opacity" min="5" max="100" value="100"
+         style="width:64px" oninput="applyOpacity()">
+
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="undo()" title="Ctrl+Z">↩</button>
+  <button class="tb-btn" onclick="redo()" title="Ctrl+Y">↪</button>
+
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="saveProject()" title="Ctrl+S — download .json">💾 Save</button>
+  <button class="tb-btn" onclick="document.getElementById('f-project').click()" title="Load saved .json">📂 Load</button>
+  <button class="tb-btn accent" onclick="exportZip()">⬇ Export ZIP</button>
+</header>
+
+<!-- ── Main layout ─────────────────────────────────────────────────── -->
+<div id="layout">
+
+  <!-- Left panel -->
+  <aside class="panel" id="left-panel">
+
+    <div class="psec">
+      <div class="psec-title">Page Settings</div>
+      <div class="prow"><label>Title</label>
+        <input class="pinput" id="pg-title" type="text" value="Bharatanatyam Invitation">
+      </div>
+      <div class="prow"><label>Page BG</label>
+        <input type="color" id="pg-bg" value="#1a0a2e"
+               style="width:36px;height:24px;border:none;cursor:pointer;">
+      </div>
+      <div class="prow"><label>Canvas BG</label>
+        <input type="color" id="cv-bg" value="#2d0a1e"
+               onchange="applyCanvasBg()"
+               style="width:36px;height:24px;border:none;cursor:pointer;">
+        <button class="tb-btn" onclick="document.getElementById('f-bgimg').click()" title="Set background image">🖼</button>
+      </div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Social Links
+        <button class="tb-btn" style="padding:1px 7px;font-size:11px;" onclick="openModal('social-modal')">＋</button>
+      </div>
+      <div id="social-list"></div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Bottom Links
+        <button class="tb-btn" style="padding:1px 7px;font-size:11px;" onclick="openModal('bottom-modal')">＋</button>
+      </div>
+      <div id="bottom-list"></div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Layer</div>
+      <div class="prow">
+        <button class="tb-btn" style="flex:1" onclick="canvas.bringToFront(canvas.getActiveObject());canvas.renderAll()">⬆ Front</button>
+        <button class="tb-btn" style="flex:1" onclick="canvas.sendToBack(canvas.getActiveObject());canvas.renderAll()">⬇ Back</button>
+      </div>
+      <div class="prow">
+        <button class="tb-btn" style="flex:1" onclick="canvas.bringForward(canvas.getActiveObject());canvas.renderAll()">▲</button>
+        <button class="tb-btn" style="flex:1" onclick="canvas.sendBackwards(canvas.getActiveObject());canvas.renderAll()">▼</button>
+      </div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Flip</div>
+      <div class="prow">
+        <button class="tb-btn" style="flex:1" onclick="flip('X')">↔ H</button>
+        <button class="tb-btn" style="flex:1" onclick="flip('Y')">↕ V</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- Canvas -->
+  <div id="canvas-area">
+    <div id="canvas-wrap"><canvas id="c"></canvas></div>
+  </div>
+
+  <!-- Right panel: object properties -->
+  <aside class="panel" id="right-panel">
+    <div class="psec" id="rp-empty">
+      <div class="psec-title">Properties</div>
+      <div style="font-size:11px;color:var(--text-dim)">Select an object to see its properties.</div>
+    </div>
+    <div class="psec" id="rp-obj" style="display:none">
+      <div class="psec-title">Position &amp; Size</div>
+      <div class="prow"><label>X</label><input class="pinput" id="pr-x" type="number" onchange="applyPos()"></div>
+      <div class="prow"><label>Y</label><input class="pinput" id="pr-y" type="number" onchange="applyPos()"></div>
+      <div class="prow"><label>W</label><input class="pinput" id="pr-w" type="number" onchange="applySize()"></div>
+      <div class="prow"><label>H</label><input class="pinput" id="pr-h" type="number" onchange="applySize()"></div>
+      <div class="prow"><label>Angle °</label><input class="pinput" id="pr-ang" type="number" onchange="applyAngle()"></div>
+    </div>
+    <div class="psec" id="rp-text" style="display:none">
+      <div class="psec-title">Text Box Width</div>
+      <div class="prow"><label>Width</label><input class="pinput" id="pr-tbw" type="number" onchange="applyTbWidth()"></div>
+      <div class="prow"><label>Line H</label>
+        <input class="pinput" id="pr-lh" type="number" step="0.05" min="0.8" max="3" onchange="applyLineHeight()">
+      </div>
+      <div class="prow"><label>Spacing</label>
+        <input class="pinput" id="pr-cs" type="number" step="1" onchange="applyCharSpacing()">
+      </div>
+    </div>
+    <div class="psec" id="rp-shadow" style="display:none">
+      <div class="psec-title">Shadow / Glow</div>
+      <div class="prow"><label>Enable</label>
+        <input type="checkbox" id="pr-shadow-on" onchange="applyShadow()">
+      </div>
+      <div class="prow"><label>Color</label>
+        <input type="color" id="pr-shadow-color" value="#000000" onchange="applyShadow()"
+               style="width:36px;height:24px;border:none;cursor:pointer;">
+      </div>
+      <div class="prow"><label>Blur</label>
+        <input class="pinput" id="pr-shadow-blur" type="number" value="10" min="0" max="100" onchange="applyShadow()">
+      </div>
+      <div class="prow"><label>Offset X</label>
+        <input class="pinput" id="pr-shadow-ox" type="number" value="2" onchange="applyShadow()">
+      </div>
+      <div class="prow"><label>Offset Y</label>
+        <input class="pinput" id="pr-shadow-oy" type="number" value="2" onchange="applyShadow()">
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Status bar -->
+<div id="statusbar">Ready — 900 × 560 canvas  (exports 1800 × 1120 @ 2×)</div>
+
+<!-- ── Modals ──────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="social-modal">
+  <div class="modal-box">
+    <div class="modal-title">Add Social Link</div>
+    <div class="prow"><label>Platform</label>
+      <select class="pinput" id="sl-plat">
+        <option value="instagram">Instagram</option>
+        <option value="facebook">Facebook</option>
+        <option value="youtube">YouTube</option>
+        <option value="whatsapp">WhatsApp</option>
+        <option value="twitter">Twitter / X</option>
+        <option value="website">Website</option>
+      </select>
+    </div>
+    <div class="prow"><label>Label</label><input class="pinput" id="sl-label" placeholder="@handle or name"></div>
+    <div class="prow"><label>URL</label><input class="pinput" id="sl-url" placeholder="https://…"></div>
+    <div class="modal-btns">
+      <button class="tb-btn accent" onclick="addSocialLink()">Add</button>
+      <button class="tb-btn" onclick="closeModal('social-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bottom-modal">
+  <div class="modal-box">
+    <div class="modal-title">Add Bottom Link</div>
+    <div class="prow"><label>Label</label><input class="pinput" id="bl-label" placeholder="e.g. RSVP"></div>
+    <div class="prow"><label>URL</label><input class="pinput" id="bl-url" placeholder="https://…"></div>
+    <div class="modal-btns">
+      <button class="tb-btn accent" onclick="addBottomLink()">Add</button>
+      <button class="tb-btn" onclick="closeModal('bottom-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file inputs -->
+<input id="f-image" type="file" accept="image/*" style="display:none" onchange="loadImage(event)">
+<input id="f-bgimg" type="file" accept="image/*" style="display:none" onchange="loadBgImage(event)">
+<input id="f-project" type="file" accept=".json" style="display:none" onchange="loadProject(event)">
+
+<script>
+/* ── Canvas setup ──────────────────────────────────────────────── */
+const CW = 900, CH = 560, EXPORT_SCALE = 2;
+
+const canvas = new fabric.Canvas('c', {
+  width: CW, height: CH,
+  backgroundColor: '#2d0a1e',
+  preserveObjectStacking: true,
+});
+
+/* ── History ────────────────────────────────────────────────────── */
+let _hist = [], _hi = -1, _paused = false;
+
+function pushHist() {
+  if (_paused) return;
+  const snap = JSON.stringify(canvas.toJSON());
+  _hist = _hist.slice(0, _hi + 1);
+  _hist.push(snap);
+  if (_hist.length > 60) _hist.shift(); else _hi++;
+}
+
+function undo() {
+  if (_hi <= 0) return;
+  _paused = true; _hi--;
+  canvas.loadFromJSON(_hist[_hi], () => { canvas.renderAll(); _paused = false; });
+}
+
+function redo() {
+  if (_hi >= _hist.length - 1) return;
+  _paused = true; _hi++;
+  canvas.loadFromJSON(_hist[_hi], () => { canvas.renderAll(); _paused = false; });
+}
+
+canvas.on('object:modified', pushHist);
+canvas.on('object:added',    pushHist);
+canvas.on('object:removed',  pushHist);
+pushHist(); // initial snapshot
+
+/* ── Default content ────────────────────────────────────────────── */
+function initDefaultContent() {
+  const t1 = new fabric.Textbox('Bharatanatyam Arangetram', {
+    left: CW / 2, top: 100, originX: 'center',
+    fontFamily: 'Cinzel', fontSize: 44, fill: '#c9a84c',
+    fontWeight: '700', textAlign: 'center', width: 800,
+    shadow: new fabric.Shadow({ color: 'rgba(201,168,76,0.4)', blur: 16, offsetX: 0, offsetY: 0 }),
+  });
+  const t2 = new fabric.Textbox('of Kum. ___________', {
+    left: CW / 2, top: 185, originX: 'center',
+    fontFamily: 'Philosopher', fontSize: 28, fill: '#f0d8a0',
+    fontStyle: 'italic', textAlign: 'center', width: 600,
+  });
+  const t3 = new fabric.Textbox('You are cordially invited\nDate · Time · Venue', {
+    left: CW / 2, top: 280, originX: 'center',
+    fontFamily: 'Philosopher', fontSize: 20, fill: '#e8d5b0',
+    textAlign: 'center', lineHeight: 1.6, width: 500,
+  });
+  const t4 = new fabric.Textbox('Under the guidance of Guru ___________', {
+    left: CW / 2, top: 420, originX: 'center',
+    fontFamily: 'Philosopher', fontSize: 16, fill: '#b09070',
+    fontStyle: 'italic', textAlign: 'center', width: 500,
+  });
+  // Decorative divider
+  const line = new fabric.Line([150, 240, 750, 240], {
+    stroke: '#c9a84c', strokeWidth: 1, opacity: 0.6,
+    selectable: true, evented: true,
+  });
+  canvas.add(line, t1, t2, t3, t4);
+  canvas.renderAll();
+}
+
+initDefaultContent();
+
+/* ── Canvas background ──────────────────────────────────────────── */
+function applyCanvasBg() {
+  canvas.setBackgroundColor(document.getElementById('cv-bg').value, canvas.renderAll.bind(canvas));
+  pushHist();
+}
+
+function loadBgImage(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    fabric.Image.fromURL(ev.target.result, img => {
+      const s = Math.max(CW / img.width, CH / img.height);
+      img.set({ scaleX: s, scaleY: s, originX: 'center', originY: 'center', left: CW/2, top: CH/2 });
+      canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
+      pushHist();
+    });
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+/* ── Add objects ────────────────────────────────────────────────── */
+function addText() {
+  const t = new fabric.Textbox('New text', {
+    left: CW/2, top: CH/2, originX: 'center', originY: 'center',
+    fontFamily: document.getElementById('tb-font').value,
+    fontSize: +document.getElementById('tb-size').value || 32,
+    fill: document.getElementById('tb-color').value,
+    textAlign: 'center', width: 400,
+  });
+  canvas.add(t);
+  canvas.setActiveObject(t);
+  t.enterEditing();
+  canvas.renderAll();
+}
+
+function addImage() { document.getElementById('f-image').click(); }
+
+function loadImage(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    fabric.Image.fromURL(ev.target.result, img => {
+      const s = Math.min(1, (CW * 0.55) / img.width, (CH * 0.55) / img.height);
+      img.set({ left: CW/2, top: CH/2, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      canvas.renderAll();
+    });
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function duplicateObj() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.clone(cl => {
+    cl.set({ left: o.left + 20, top: o.top + 20 });
+    canvas.add(cl); canvas.setActiveObject(cl); canvas.renderAll();
+  });
+}
+
+function deleteObj() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  if (o.type === 'activeSelection') o.getObjects().forEach(x => canvas.remove(x));
+  else canvas.remove(o);
+  canvas.discardActiveObject(); canvas.renderAll();
+}
+
+function flip(axis) {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set('flip' + axis, !o['flip' + axis]); canvas.renderAll();
+}
+
+/* ── Text styling ───────────────────────────────────────────────── */
+function getTextObj() {
+  const o = canvas.getActiveObject();
+  return (o && (o.type === 'textbox' || o.type === 'i-text' || o.type === 'text')) ? o : null;
+}
+
+function applyFont()      { const t = getTextObj(); if (t) { t.set('fontFamily', document.getElementById('tb-font').value); canvas.renderAll(); } }
+function applyFontSize()  { const t = getTextObj(); if (t) { t.set('fontSize', +document.getElementById('tb-size').value || 32); canvas.renderAll(); } }
+function applyColor()     { const t = getTextObj(); if (t) { t.set('fill', document.getElementById('tb-color').value); canvas.renderAll(); } }
+function setAlign(a)      { const t = getTextObj(); if (t) { t.set('textAlign', a); canvas.renderAll(); } }
+
+function toggleBold() {
+  const t = getTextObj(); if (!t) return;
+  t.set('fontWeight', t.fontWeight === 'bold' ? 'normal' : 'bold');
+  document.getElementById('btn-bold').classList.toggle('active', t.fontWeight === 'bold');
+  canvas.renderAll();
+}
+
+function toggleItalic() {
+  const t = getTextObj(); if (!t) return;
+  t.set('fontStyle', t.fontStyle === 'italic' ? 'normal' : 'italic');
+  document.getElementById('btn-italic').classList.toggle('active', t.fontStyle === 'italic');
+  canvas.renderAll();
+}
+
+function applyOpacity() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set('opacity', +document.getElementById('tb-opacity').value / 100); canvas.renderAll();
+}
+
+function applyLineHeight()   { const t = getTextObj(); if (t) { t.set('lineHeight', +document.getElementById('pr-lh').value); canvas.renderAll(); } }
+function applyCharSpacing()  { const t = getTextObj(); if (t) { t.set('charSpacing', +document.getElementById('pr-cs').value); canvas.renderAll(); } }
+function applyTbWidth()      { const t = getTextObj(); if (t) { t.set('width', +document.getElementById('pr-tbw').value); canvas.renderAll(); } }
+
+/* ── Shadow ─────────────────────────────────────────────────────── */
+function applyShadow() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  const on    = document.getElementById('pr-shadow-on').checked;
+  const color = document.getElementById('pr-shadow-color').value;
+  const blur  = +document.getElementById('pr-shadow-blur').value;
+  const ox    = +document.getElementById('pr-shadow-ox').value;
+  const oy    = +document.getElementById('pr-shadow-oy').value;
+  o.set('shadow', on ? new fabric.Shadow({ color, blur, offsetX: ox, offsetY: oy }) : null);
+  canvas.renderAll();
+}
+
+/* ── Properties panel ───────────────────────────────────────────── */
+function syncProps(o) {
+  const rpe = document.getElementById('rp-empty');
+  const rpo = document.getElementById('rp-obj');
+  const rpt = document.getElementById('rp-text');
+  const rps = document.getElementById('rp-shadow');
+  if (!o) { rpe.style.display = ''; rpo.style.display = rpt.style.display = rps.style.display = 'none'; return; }
+  rpe.style.display = 'none'; rpo.style.display = '';
+  document.getElementById('pr-x').value   = Math.round(o.left);
+  document.getElementById('pr-y').value   = Math.round(o.top);
+  document.getElementById('pr-w').value   = Math.round(o.getScaledWidth());
+  document.getElementById('pr-h').value   = Math.round(o.getScaledHeight());
+  document.getElementById('pr-ang').value = Math.round(o.angle || 0);
+  document.getElementById('tb-opacity').value = Math.round((o.opacity ?? 1) * 100);
+
+  const isText = o.type === 'textbox' || o.type === 'i-text' || o.type === 'text';
+  rpt.style.display = isText ? '' : 'none';
+  rps.style.display = '';
+  if (isText) {
+    document.getElementById('tb-font').value  = o.fontFamily || 'Arial';
+    document.getElementById('tb-size').value  = o.fontSize   || 32;
+    document.getElementById('tb-color').value = o.fill       || '#ffffff';
+    document.getElementById('btn-bold').classList.toggle('active',   o.fontWeight === 'bold');
+    document.getElementById('btn-italic').classList.toggle('active', o.fontStyle  === 'italic');
+    document.getElementById('pr-tbw').value = Math.round(o.width);
+    document.getElementById('pr-lh').value  = (o.lineHeight || 1.16).toFixed(2);
+    document.getElementById('pr-cs').value  = Math.round(o.charSpacing || 0);
+  }
+  const sh = o.shadow;
+  document.getElementById('pr-shadow-on').checked        = !!sh;
+  document.getElementById('pr-shadow-color').value       = sh ? (sh.color || '#000000') : '#000000';
+  document.getElementById('pr-shadow-blur').value        = sh ? (sh.blur  || 0) : 10;
+  document.getElementById('pr-shadow-ox').value          = sh ? (sh.offsetX || 0) : 2;
+  document.getElementById('pr-shadow-oy').value          = sh ? (sh.offsetY || 0) : 2;
+}
+
+function applyPos() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set({ left: +document.getElementById('pr-x').value, top: +document.getElementById('pr-y').value });
+  o.setCoords(); canvas.renderAll();
+}
+
+function applySize() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  const w = +document.getElementById('pr-w').value, h = +document.getElementById('pr-h').value;
+  o.set({ scaleX: w / (o.width || 1), scaleY: h / (o.height || 1) });
+  o.setCoords(); canvas.renderAll();
+}
+
+function applyAngle() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set('angle', +document.getElementById('pr-ang').value);
+  o.setCoords(); canvas.renderAll();
+}
+
+canvas.on('selection:created', e => syncProps(e.selected?.[0]));
+canvas.on('selection:updated', e => syncProps(e.selected?.[0]));
+canvas.on('selection:cleared', () => syncProps(null));
+canvas.on('object:modified',   e => syncProps(e.target));
+
+/* ── Social links ───────────────────────────────────────────────── */
+const SOCIAL_META = {
+  instagram: { icon: '📸', color: '#E1306C' },
+  facebook:  { icon: '👥', color: '#1877F2' },
+  youtube:   { icon: '▶️', color: '#FF0000' },
+  whatsapp:  { icon: '💬', color: '#25D366' },
+  twitter:   { icon: '🐦', color: '#1DA1F2' },
+  website:   { icon: '🌐', color: '#c9a84c' },
+};
+
+let socialLinks = [], bottomLinks = [];
+
+function renderSocialList() {
+  const el = document.getElementById('social-list');
+  el.innerHTML = '';
+  socialLinks.forEach((l, i) => {
+    const d = document.createElement('div');
+    d.className = 'link-item';
+    d.innerHTML = `<span>${SOCIAL_META[l.platform]?.icon ?? '🔗'}</span>
+      <span class="link-lbl">${esc(l.label)}</span>
+      <button class="ico-btn" onclick="socialLinks.splice(${i},1);renderSocialList()">✕</button>`;
+    el.appendChild(d);
+  });
+}
+
+function renderBottomList() {
+  const el = document.getElementById('bottom-list');
+  el.innerHTML = '';
+  bottomLinks.forEach((l, i) => {
+    const d = document.createElement('div');
+    d.className = 'link-item';
+    d.innerHTML = `<span class="link-lbl">${esc(l.label)}</span>
+      <button class="ico-btn" onclick="bottomLinks.splice(${i},1);renderBottomList()">✕</button>`;
+    el.appendChild(d);
+  });
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function addSocialLink() {
+  const url = document.getElementById('sl-url').value.trim(); if (!url) return;
+  socialLinks.push({
+    platform: document.getElementById('sl-plat').value,
+    label:    document.getElementById('sl-label').value.trim() || document.getElementById('sl-plat').value,
+    url,
+  });
+  renderSocialList(); closeModal('social-modal');
+}
+
+function addBottomLink() {
+  const label = document.getElementById('bl-label').value.trim();
+  const url   = document.getElementById('bl-url').value.trim();
+  if (!label || !url) return;
+  bottomLinks.push({ label, url });
+  renderBottomList(); closeModal('bottom-modal');
+}
+
+/* ── Save / Load project ────────────────────────────────────────── */
+function saveProject() {
+  const data = {
+    canvas:      canvas.toJSON(),
+    canvasBg:    document.getElementById('cv-bg').value,
+    pageTitle:   document.getElementById('pg-title').value,
+    pageBg:      document.getElementById('pg-bg').value,
+    socialLinks, bottomLinks,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  dlBlob(blob, 'invitation.json');
+}
+
+function loadProject(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      document.getElementById('cv-bg').value   = d.canvasBg    || '#2d0a1e';
+      document.getElementById('pg-title').value = d.pageTitle  || '';
+      document.getElementById('pg-bg').value   = d.pageBg      || '#1a0a2e';
+      socialLinks = d.socialLinks || []; renderSocialList();
+      bottomLinks = d.bottomLinks || []; renderBottomList();
+      _paused = true;
+      canvas.loadFromJSON(d.canvas, () => { canvas.renderAll(); _paused = false; pushHist(); });
+    } catch { alert('Invalid project file.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ── Export ZIP ─────────────────────────────────────────────────── */
+async function exportZip() {
+  setStatus('Rendering invitation…');
+
+  const imgB64 = canvas.toDataURL({ format: 'png', multiplier: EXPORT_SCALE }).split(',')[1];
+
+  const pageTitle = document.getElementById('pg-title').value || 'Invitation';
+  const pageBg    = document.getElementById('pg-bg').value;
+
+  const socialHTML = socialLinks.map(l => {
+    const m = SOCIAL_META[l.platform] || { icon: '🔗', color: '#888' };
+    return `<a href="${esc(l.url)}" target="_blank" rel="noopener"
+         style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+                border-radius:24px;background:${m.color};color:#fff;
+                text-decoration:none;font-size:13px;font-weight:500;letter-spacing:.3px;">
+      ${m.icon} ${esc(l.label)}
+    </a>`;
+  }).join('\n      ');
+
+  const bottomHTML = bottomLinks.map(l =>
+    `<a href="${esc(l.url)}" target="_blank" rel="noopener" class="bl">${esc(l.label)}</a>`
+  ).join('\n      ');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${esc(pageTitle)}</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:${pageBg};font-family:'Segoe UI',system-ui,sans-serif;
+         min-height:100vh;display:flex;flex-direction:column;}
+    header{display:flex;justify-content:space-between;align-items:center;
+           padding:14px 28px;background:rgba(0,0,0,.4);
+           backdrop-filter:blur(8px);flex-wrap:wrap;gap:10px;}
+    .site-title{color:#c9a84c;font-size:1.05rem;font-weight:600;letter-spacing:.5px;}
+    .social-links{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    main{flex:1;display:flex;justify-content:center;align-items:center;padding:36px 20px;}
+    .inv-img{max-width:100%;max-height:82vh;border-radius:10px;
+             box-shadow:0 8px 48px rgba(0,0,0,.65);}
+    footer{padding:20px 28px;background:rgba(0,0,0,.4);backdrop-filter:blur(8px);
+           display:flex;justify-content:center;gap:14px;flex-wrap:wrap;}
+    .bl{color:#c9a84c;text-decoration:none;padding:8px 22px;
+        border:1px solid #c9a84c;border-radius:24px;font-size:14px;
+        transition:background .2s,color .2s;}
+    .bl:hover{background:#c9a84c;color:#1a0000;}
+    @media(max-width:600px){header{padding:10px 16px;}
+      main{padding:20px 12px;} footer{gap:8px;}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="site-title">${esc(pageTitle)}</div>
+    <div class="social-links">
+      ${socialHTML || '<!-- add social links in the editor -->'}
+    </div>
+  </header>
+  <main>
+    <img class="inv-img" src="images/invitation.png" alt="${esc(pageTitle)}">
+  </main>
+  <footer>
+    ${bottomHTML || '<!-- add bottom links in the editor -->'}
+  </footer>
+</body>
+</html>`;
+
+  const zip = new JSZip();
+  zip.file('index.html', html);
+  zip.folder('images').file('invitation.png', imgB64, { base64: true });
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  dlBlob(blob, 'invitation-site.zip');
+  setStatus('ZIP exported — extract folder and push to GitHub Pages');
+}
+
+/* ── Helpers ────────────────────────────────────────────────────── */
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function dlBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function setStatus(msg) { document.getElementById('statusbar').textContent = msg; }
+
+/* ── Keyboard shortcuts ─────────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  const inField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { if (!inField) { e.preventDefault(); undo(); } }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { if (!inField) { e.preventDefault(); redo(); } }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !inField) { e.preventDefault(); deleteObj(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveProject(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); duplicateObj(); }
+});
+
+/* ── Load project via toolbar ───────────────────────────────────── */
+// Toolbar Load button wired here so it can be added to toolbar easily
+// Usage: <button class="tb-btn" onclick="document.getElementById('f-project').click()">📂 Load</button>
+</script>
+
+</body>
+</html>

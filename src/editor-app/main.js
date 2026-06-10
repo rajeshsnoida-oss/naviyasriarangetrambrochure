@@ -432,7 +432,7 @@ function pngToCmykXObject(pngBuf, doc, pageW, pageH) {
   return { ref: xobj, imgW, imgH };
 }
 
-// Assemble vector PDF: CMYK background images + PDF text layers.
+// Assemble vector PDF: DeviceCMYK background images (via pngToCmykXObject) + DeviceRGB vector text.
 ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsList, spec) => {
   // Collect logs to return to renderer (they appear in DevTools console, not terminal).
   const logs = [];
@@ -517,13 +517,24 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
   const ws = fs.createWriteStream(destPath);
   doc.pipe(ws);
 
+  let pageIdx = 0;
   for (const { bgDataUrl, textData } of (pdfSections || [])) {
+    pageIdx++;
     doc.addPage({ size: [pageW, pageH], margin: 0 });
 
     if (bgDataUrl) {
       const b64 = bgDataUrl.split(',')[1];
       if (b64) {
-        try { doc.image(Buffer.from(b64, 'base64'), 0, 0, { width: pageW, height: pageH }); }
+        try {
+          const pngBuf = Buffer.from(b64, 'base64');
+          const { ref } = pngToCmykXObject(pngBuf, doc, pageW, pageH);
+          const xName = `CMYKBg${pageIdx}`;
+          doc.page.xobjects[xName] = ref;
+          doc.save();
+          doc.transform(pageW, 0, 0, -pageH, 0, pageH);
+          doc.addContent(`/${xName} Do`);
+          doc.restore();
+        }
         catch (e) { perr(`[PDF main] bg image failed: ${e && e.message}`); }
       }
     }
