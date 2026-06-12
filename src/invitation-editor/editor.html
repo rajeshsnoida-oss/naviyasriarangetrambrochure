@@ -1008,27 +1008,24 @@ async function exportZip() {
   const pageBg    = document.getElementById('pg-bg').value;
   const hasBg     = !!pageBgDataUrl;
 
+  // Links use raw canvas pixel positions; the links-layer is scaled by JS to match the page
   const socialLinkHTML = socialLinks.map(l => {
-    const lx = (l.pos.x / CW * 100).toFixed(3);
-    const ly = (l.pos.y / CH * 100).toFixed(3);
     const bg  = l.bgColor   || SOCIAL_COLORS[l.platform] || '#888';
     const col = l.iconColor || '#ffffff';
     const svg = SOCIAL_SVG[l.platform] || '';
-    return `<a class="lnk-icon" href="${esc(l.url)}" target="_blank" rel="noopener" title="${esc(l.label)}"
-       style="left:${lx}%;top:${ly}%;background:${bg};color:${col}">${svg}</a>`;
-  }).join('\n    ');
+    return `<a class="lnk-icon" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="${esc(l.label)}"
+       style="left:${Math.round(l.pos.x)}px;top:${Math.round(l.pos.y)}px;background:${bg};color:${col}">${svg}</a>`;
+  }).join('\n      ');
 
   const bottomLinkHTML = bottomLinks.map(l => {
-    const lx  = (l.pos.x / CW * 100).toFixed(3);
-    const ly  = (l.pos.y / CH * 100).toFixed(3);
     const bg  = l.bgColor   || '#000000';
     const col = l.textColor || '#ffffff';
     const fs  = l.fontSize  || 13;
     const fw  = l.bold   ? 'font-weight:bold;'   : '';
     const fi  = l.italic ? 'font-style:italic;'  : '';
-    return `<a class="lnk-btn" href="${esc(l.url)}" target="_blank" rel="noopener"
-       style="left:${lx}%;top:${ly}%;background:${bg};color:${col};font-size:${fs}px;${fw}${fi}">${esc(l.label)}</a>`;
-  }).join('\n    ');
+    return `<a class="lnk-btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
+       style="left:${Math.round(l.pos.x)}px;top:${Math.round(l.pos.y)}px;background:${bg};color:${col};font-size:${fs}px;${fw}${fi}">${esc(l.label)}</a>`;
+  }).join('\n      ');
 
   // Background goes on body as CSS so it covers the full viewport, not just the page container
   const bodyBgExtra = hasBg
@@ -1039,7 +1036,7 @@ async function exportZip() {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
   <title>${esc(pageTitle)}</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1048,33 +1045,48 @@ async function exportZip() {
       background:${pageBg};${bodyBgExtra}
       display:flex;align-items:center;justify-content:center;
     }
-    /* Size the page container to maintain 900:560 ratio within the viewport */
-    #page{
-      position:relative;
-      width:min(100vw, calc(100vh * 900 / 560));
-      height:min(100vh, calc(100vw * 560 / 900));
+    /* #page sized by JS to maintain 900:560 ratio, avoiding the iOS 100vh browser-chrome bug */
+    #page{position:relative;overflow:hidden;flex-shrink:0;}
+    #page-inv{display:block;width:100%;height:100%;}
+    /* links-layer is always 900×560 canvas space; JS scales it to match #page */
+    #links-layer{
+      position:absolute;top:0;left:0;width:900px;height:560px;
+      transform-origin:top left;
     }
-    #page-inv{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:1;}
-    /* left/top are the top-left corner of the element (no translate offset) */
     .lnk-icon{
       position:absolute;display:flex;align-items:center;justify-content:center;
-      width:48px;height:48px;border-radius:50%;
-      text-decoration:none;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.6);
+      width:40px;height:40px;border-radius:50%;
+      text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.6);
     }
     .lnk-btn{
       position:absolute;display:inline-flex;align-items:center;
-      padding:8px 16px;border-radius:20px;
+      padding:7px 14px;border-radius:20px;
       text-decoration:none;white-space:nowrap;
-      z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.6);
+      box-shadow:0 2px 8px rgba(0,0,0,.6);
     }
   </style>
 </head>
 <body>
   <div id="page">
     <img id="page-inv" src="images/invitation.png" alt="${esc(pageTitle)}">
-    ${socialLinkHTML}
-    ${bottomLinkHTML}
+    <div id="links-layer">
+      ${socialLinkHTML}
+      ${bottomLinkHTML}
+    </div>
   </div>
+  <script>
+    function layout() {
+      var vw = document.documentElement.clientWidth;
+      var vh = document.documentElement.clientHeight;
+      var s  = Math.min(vw / 900, vh / 560);
+      var page = document.getElementById('page');
+      page.style.width  = Math.round(900 * s) + 'px';
+      page.style.height = Math.round(560 * s) + 'px';
+      document.getElementById('links-layer').style.transform = 'scale(' + s + ')';
+    }
+    layout();
+    window.addEventListener('resize', layout);
+  </script>
 </body>
 </html>`;
 
