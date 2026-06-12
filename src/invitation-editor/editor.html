@@ -117,13 +117,26 @@
 
     /* ── Canvas area ─────────────────────── */
     #canvas-area {
-      flex: 1;
+      flex: 1; position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
       background: #1a0a2e; /* updated by applyPageBg() to match pg-bg */
     }
+    #layout-banner {
+      display: none; position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+      background: rgba(210,90,0,0.92); color: #fff;
+      font-size: 11px; font-weight: 600; text-align: center;
+      padding: 4px 8px; pointer-events: none;
+    }
+    /* ── Preview modal ───────────────────── */
+    .prev-frames { display: flex; gap: 20px; padding: 12px 0; overflow: auto; align-items: flex-start; }
+    .prev-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .prev-col-lbl { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+    .prev-viewport { position: relative; overflow: hidden; flex-shrink: 0; }
+    .prev-viewport.desktop { border: 2px solid var(--border); border-radius: 4px; }
+    .prev-viewport.mobile  { border: 7px solid #2a2a2a; border-radius: 24px; box-shadow: inset 0 0 0 1px #444; }
     #canvas-wrap {
       position: relative;
       width: 900px;
@@ -270,6 +283,12 @@
   <button class="tb-btn" onclick="openModal('font-modal')" title="Load a Google Font">＋ Font</button>
 
   <div class="tb-sep"></div>
+  <span class="tb-label">Layout</span>
+  <button class="tb-btn active" id="btn-layout-desktop" onclick="setEditLayout('desktop')" title="Edit desktop link positions">◻ Desktop</button>
+  <button class="tb-btn"        id="btn-layout-mobile"  onclick="setEditLayout('mobile')"  title="Edit mobile link positions">📱 Mobile</button>
+  <button class="tb-btn" onclick="openPreview()" title="Preview desktop and mobile layouts">👁 Preview</button>
+
+  <div class="tb-sep"></div>
   <button class="tb-btn accent" onclick="exportZip()">⬇ Export ZIP</button>
 </header>
 
@@ -332,6 +351,7 @@
   <button class="panel-tab" id="left-tab" onclick="togglePanel('left')" title="Collapse/expand left panel">◀</button>
 
   <div id="canvas-area">
+    <div id="layout-banner">📱 Editing Mobile Layout — drag links to set mobile positions</div>
     <div id="canvas-wrap">
       <img id="page-bg-img" alt="">
       <canvas id="c"></canvas>
@@ -482,11 +502,40 @@
   </div>
 </div>
 
+<!-- Preview modal -->
+<div class="modal-overlay" id="preview-modal">
+  <div class="modal-box" style="max-width:96vw;max-height:92vh;display:flex;flex-direction:column;width:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="modal-title" style="margin:0;">Preview</div>
+      <button class="tb-btn" onclick="closeModal('preview-modal')">✕ Close</button>
+    </div>
+    <div class="prev-frames">
+      <div class="prev-col">
+        <div class="prev-col-lbl">◻ Desktop (1280 × 720)</div>
+        <div id="prev-desktop" class="prev-viewport desktop"></div>
+      </div>
+      <div class="prev-col">
+        <div class="prev-col-lbl">📱 Mobile (390 × 844)</div>
+        <div id="prev-mobile" class="prev-viewport mobile"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ── Constants ───────────────────────────────────────────────────── */
 const CW = 900, CH = 560, EXPORT_SCALE = 2;
 let scale = 1;
 let pageBgDataUrl = null, pageBgExt = 'jpg';
+let editLayout = 'desktop'; // 'desktop' | 'mobile'
+
+function setEditLayout(mode) {
+  editLayout = mode;
+  document.getElementById('btn-layout-desktop').classList.toggle('active', mode === 'desktop');
+  document.getElementById('btn-layout-mobile').classList.toggle('active', mode === 'mobile');
+  document.getElementById('layout-banner').style.display = mode === 'mobile' ? 'block' : 'none';
+  renderLinkWidgets();
+}
 
 const SOCIAL_COLORS = {
   instagram: '#E1306C',
@@ -831,7 +880,8 @@ function addSocialLink() {
     url,
     bgColor:   document.getElementById('sl-bg-color').value,
     iconColor: document.getElementById('sl-icon-color').value,
-    pos: { x: 20, y: 20 + offset },
+    pos:       { x: 20, y: 20 + offset },
+    mobilePos: { x: 20, y: 20 + offset },
   });
   document.getElementById('sl-label').value = '';
   document.getElementById('sl-url').value   = '';
@@ -851,7 +901,8 @@ function addBottomLink() {
     fontSize:  +document.getElementById('bl-font-size').value || 14,
     bold:      document.getElementById('bl-bold').checked,
     italic:    document.getElementById('bl-italic').checked,
-    pos: { x: 20, y: 400 + offset },
+    pos:       { x: 20, y: 400 + offset },
+    mobilePos: { x: 20, y: 400 + offset },
   });
   document.getElementById('bl-label').value = '';
   document.getElementById('bl-url').value   = '';
@@ -867,7 +918,8 @@ function renderLinkWidgets() {
   const wrap = document.getElementById('canvas-wrap');
 
   socialLinks.forEach((l, i) => {
-    const div = makeWidget('social', i, l.pos.x, l.pos.y);
+    const p = editLayout === 'mobile' ? (l.mobilePos || l.pos) : l.pos;
+    const div = makeWidget('social', i, p.x, p.y);
     const a = document.createElement('a');
     a.href = l.url; a.target = '_blank'; a.rel = 'noopener';
     a.className = 'lnk-icon';
@@ -880,7 +932,8 @@ function renderLinkWidgets() {
   });
 
   bottomLinks.forEach((l, i) => {
-    const div = makeWidget('bottom', i, l.pos.x, l.pos.y);
+    const p = editLayout === 'mobile' ? (l.mobilePos || l.pos) : l.pos;
+    const div = makeWidget('bottom', i, p.x, p.y);
     const a = document.createElement('a');
     a.href = l.url; a.target = '_blank'; a.rel = 'noopener';
     a.className = 'lnk-btn';
@@ -952,7 +1005,11 @@ function makeWidget(type, idx, x, y) {
     const widget_top_canvas = (e.clientY - drag.offY - cwR.top) / scale;
     const nx = (e.clientX - drag.offX - cwR.left) / scale;
     const ny = widget_top_canvas + HANDLE_TOTAL; // icon top = widget top + handle + gap
-    drag.arr[drag.idx].pos = { x: nx, y: ny };
+    if (editLayout === 'mobile') {
+      drag.arr[drag.idx].mobilePos = { x: nx, y: ny };
+    } else {
+      drag.arr[drag.idx].pos = { x: nx, y: ny };
+    }
     drag.widget.style.position = 'absolute';
     drag.widget.style.left = nx + 'px';
     drag.widget.style.top  = (ny - HANDLE_TOTAL) + 'px'; // widget positioned so icon is at ny
@@ -987,8 +1044,8 @@ function loadProject(e) {
       pageBgDataUrl = d.pageBgDataUrl || null;
       pageBgExt     = d.pageBgExt    || 'jpg';
       applyPageBg();
-      socialLinks = (d.socialLinks || []).map(l => ({ ...l, pos: l.pos || { x: 20, y: 20 } }));
-      bottomLinks = (d.bottomLinks || []).map(l => ({ ...l, pos: l.pos || { x: 20, y: 400 } }));
+      socialLinks = (d.socialLinks || []).map(l => ({ ...l, pos: l.pos || { x: 20, y: 20 }, mobilePos: l.mobilePos || l.pos || { x: 20, y: 20 } }));
+      bottomLinks = (d.bottomLinks || []).map(l => ({ ...l, pos: l.pos || { x: 20, y: 400 }, mobilePos: l.mobilePos || l.pos || { x: 20, y: 400 } }));
       renderSocialList();
       renderBottomList();
       _paused = true;
@@ -997,6 +1054,79 @@ function loadProject(e) {
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+
+/* ── Preview ─────────────────────────────────────────────────────── */
+function openPreview() {
+  const canvasDataUrl = canvas.toDataURL({ format: 'png', multiplier: 1 });
+  renderPreviewDevice('prev-desktop', canvasDataUrl, 1280, 720, 'desktop');
+  renderPreviewDevice('prev-mobile',  canvasDataUrl, 390,  844, 'mobile');
+  document.getElementById('preview-modal').classList.add('open');
+}
+
+function renderPreviewDevice(containerId, canvasDataUrl, vpW, vpH, layout) {
+  const container = document.getElementById(containerId);
+  const PREV_SCALE = 0.5;
+  const dispW = Math.round(vpW * PREV_SCALE);
+  const dispH = Math.round(vpH * PREV_SCALE);
+  container.style.width  = dispW + 'px';
+  container.style.height = dispH + 'px';
+
+  // Scale factor: how the 900×560 canvas fits inside vpW×vpH
+  const s = Math.min(vpW / CW, vpH / CH);
+  const pageW = Math.round(CW * s);
+  const pageH = Math.round(CH * s);
+
+  // Position page centred within viewport
+  const pageLeft = Math.round((vpW - pageW) / 2);
+  const pageTop  = Math.round((vpH - pageH) / 2);
+
+  const links = [
+    ...socialLinks.map(l => ({ ...l, _type: 'social' })),
+    ...bottomLinks.map(l => ({ ...l, _type: 'bottom' })),
+  ];
+
+  const linkHTML = links.map(l => {
+    const p = layout === 'mobile' ? (l.mobilePos || l.pos) : l.pos;
+    if (l._type === 'social') {
+      const bg  = l.bgColor   || SOCIAL_COLORS[l.platform] || '#888';
+      const col = l.iconColor || '#ffffff';
+      const svg = SOCIAL_SVG[l.platform] || '';
+      return `<div style="position:absolute;left:${p.x}px;top:${p.y}px;
+        width:40px;height:40px;border-radius:50%;
+        background:${bg};color:${col};display:flex;align-items:center;justify-content:center;
+        box-shadow:0 2px 6px rgba(0,0,0,.5);font-size:18px;">${svg}</div>`;
+    } else {
+      const bg  = l.bgColor   || '#000000';
+      const col = l.textColor || '#ffffff';
+      const fw  = l.bold   ? 'bold'   : 'normal';
+      const fi  = l.italic ? 'italic' : 'normal';
+      const fs  = l.fontSize || 14;
+      return `<div style="position:absolute;left:${p.x}px;top:${p.y}px;
+        padding:7px 14px;border-radius:20px;white-space:nowrap;
+        background:${bg};color:${col};font-size:${fs}px;font-weight:${fw};font-style:${fi};
+        box-shadow:0 2px 6px rgba(0,0,0,.5);">${esc(l.label)}</div>`;
+    }
+  }).join('');
+
+  container.innerHTML = `
+    <div style="position:absolute;inset:0;background:#1a0a2e;overflow:hidden;">
+      ${canvasDataUrl ? `<img src="${canvasDataUrl}" style="
+        position:absolute;
+        left:${pageLeft}px;top:${pageTop}px;
+        width:${pageW}px;height:${pageH}px;">` : ''}
+      <div style="position:absolute;left:${pageLeft}px;top:${pageTop}px;
+        width:${CW}px;height:${CH}px;
+        transform:scale(${s});transform-origin:top left;pointer-events:none;">
+        ${linkHTML}
+      </div>
+    </div>`;
+
+  // Apply display scale
+  container.firstElementChild.style.transform = `scale(${PREV_SCALE})`;
+  container.firstElementChild.style.transformOrigin = 'top left';
+  container.firstElementChild.style.width  = vpW + 'px';
+  container.firstElementChild.style.height = vpH + 'px';
 }
 
 /* ── Export ZIP ──────────────────────────────────────────────────── */
@@ -1008,12 +1138,15 @@ async function exportZip() {
   const pageBg    = document.getElementById('pg-bg').value;
   const hasBg     = !!pageBgDataUrl;
 
-  // Links use raw canvas pixel positions; the links-layer is scaled by JS to match the page
+  // Links carry both desktop and mobile positions; runtime JS switches based on viewport
   const socialLinkHTML = socialLinks.map(l => {
     const bg  = l.bgColor   || SOCIAL_COLORS[l.platform] || '#888';
     const col = l.iconColor || '#ffffff';
     const svg = SOCIAL_SVG[l.platform] || '';
+    const mp  = l.mobilePos || l.pos;
     return `<a class="lnk-icon" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="${esc(l.label)}"
+       data-dx="${Math.round(l.pos.x)}" data-dy="${Math.round(l.pos.y)}"
+       data-mx="${Math.round(mp.x)}" data-my="${Math.round(mp.y)}"
        style="left:${Math.round(l.pos.x)}px;top:${Math.round(l.pos.y)}px;background:${bg};color:${col}">${svg}</a>`;
   }).join('\n      ');
 
@@ -1023,7 +1156,10 @@ async function exportZip() {
     const fs  = l.fontSize  || 13;
     const fw  = l.bold   ? 'font-weight:bold;'   : '';
     const fi  = l.italic ? 'font-style:italic;'  : '';
+    const mp  = l.mobilePos || l.pos;
     return `<a class="lnk-btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
+       data-dx="${Math.round(l.pos.x)}" data-dy="${Math.round(l.pos.y)}"
+       data-mx="${Math.round(mp.x)}" data-my="${Math.round(mp.y)}"
        style="left:${Math.round(l.pos.x)}px;top:${Math.round(l.pos.y)}px;background:${bg};color:${col};font-size:${fs}px;${fw}${fi}">${esc(l.label)}</a>`;
   }).join('\n      ');
 
@@ -1075,6 +1211,7 @@ async function exportZip() {
     </div>
   </div>
   <script>
+    var _lastMobile = null;
     function layout() {
       var vw = document.documentElement.clientWidth;
       var vh = document.documentElement.clientHeight;
@@ -1083,6 +1220,20 @@ async function exportZip() {
       page.style.width  = Math.round(900 * s) + 'px';
       page.style.height = Math.round(560 * s) + 'px';
       document.getElementById('links-layer').style.transform = 'scale(' + s + ')';
+      // Switch link positions when mobile/desktop changes
+      var isMobile = vw < 768 || vh > vw;
+      if (isMobile !== _lastMobile) {
+        _lastMobile = isMobile;
+        document.querySelectorAll('#links-layer [data-dx]').forEach(function(el) {
+          if (isMobile) {
+            el.style.left = el.dataset.mx + 'px';
+            el.style.top  = el.dataset.my + 'px';
+          } else {
+            el.style.left = el.dataset.dx + 'px';
+            el.style.top  = el.dataset.dy + 'px';
+          }
+        });
+      }
     }
     layout();
     window.addEventListener('resize', layout);
