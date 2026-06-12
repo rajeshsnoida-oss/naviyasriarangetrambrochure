@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
   <title>Invitation</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -11,36 +11,51 @@
       background:#1a0a2e;background-image:url('images/bg.jpg');background-size:cover;background-position:center;
       display:flex;align-items:center;justify-content:center;
     }
-    /* Size the page container to maintain 900:560 ratio within the viewport */
-    #page{
-      position:relative;
-      width:min(100vw, calc(100vh * 900 / 560));
-      height:min(100vh, calc(100vw * 560 / 900));
+    /* #page sized by JS to maintain 900:560 ratio, avoiding the iOS 100vh browser-chrome bug */
+    #page{position:relative;overflow:hidden;flex-shrink:0;}
+    #page-inv{display:block;width:100%;height:100%;}
+    /* links-layer is always 900x560 canvas space; JS scales it to match #page */
+    #links-layer{
+      position:absolute;top:0;left:0;width:900px;height:560px;
+      transform-origin:top left;
     }
-    #page-inv{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:1;}
-    /* left/top are the top-left corner of the element (no translate offset) */
     .lnk-icon{
       position:absolute;display:flex;align-items:center;justify-content:center;
-      width:48px;height:48px;border-radius:50%;
-      text-decoration:none;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.6);
+      width:40px;height:40px;border-radius:50%;
+      text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.6);
     }
     .lnk-btn{
       position:absolute;display:inline-flex;align-items:center;
-      padding:8px 16px;border-radius:20px;
+      padding:7px 14px;border-radius:20px;
       text-decoration:none;white-space:nowrap;
-      z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.6);
+      box-shadow:0 2px 8px rgba(0,0,0,.6);
     }
   </style>
 </head>
 <body>
   <div id="page">
     <img id="page-inv" src="images/invitation.png" alt="Invitation">
-    <a class="lnk-icon" href="https://www.instagram.com/naviyasri.rajeshkumar?igsh=a3prN3h4czFmZTlz" target="_blank" rel="noopener" title="@naviyasri.rajeshkumar"
-       style="left:99.671%;top:1.820%;background:#e1306c;color:#ffffff"><svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.791-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
-    <a class="lnk-btn" href="www.indusphotography.com/live/" target="_blank" rel="noopener"
-       style="left:3.428%;top:19.425%;background:#efe6e6;color:#5a5aff;font-size:18px;font-weight:bold;">Live streaming</a>
-    <a class="lnk-btn" href="https://naviyasriarangetram.com/brochure.pdf" target="_blank" rel="noopener"
-       style="left:79.575%;top:20.009%;background:#f2eeee;color:#1d5bd7;font-size:18px;font-weight:bold;">Program brochure</a>
+    <div id="links-layer">
+      <a class="lnk-icon" href="https://www.instagram.com/naviyasri.rajeshkumar?igsh=a3prN3h4czFmZTlz" target="_blank" rel="noopener noreferrer" title="@naviyasri.rajeshkumar"
+         style="left:897px;top:10px;background:#e1306c;color:#ffffff"><svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.791-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+      <a class="lnk-btn" href="www.indusphotography.com/live/" target="_blank" rel="noopener noreferrer"
+         style="left:31px;top:109px;background:#efe6e6;color:#5a5aff;font-size:18px;font-weight:bold;">Live streaming</a>
+      <a class="lnk-btn" href="https://naviyasriarangetrambrochure.com/brochure.pdf" target="_blank" rel="noopener noreferrer"
+         style="left:716px;top:112px;background:#f2eeee;color:#1d5bd7;font-size:18px;font-weight:bold;">Program brochure</a>
+    </div>
   </div>
+  <script>
+    function layout() {
+      var vw = document.documentElement.clientWidth;
+      var vh = document.documentElement.clientHeight;
+      var s  = Math.min(vw / 900, vh / 560);
+      var page = document.getElementById('page');
+      page.style.width  = Math.round(900 * s) + 'px';
+      page.style.height = Math.round(560 * s) + 'px';
+      document.getElementById('links-layer').style.transform = 'scale(' + s + ')';
+    }
+    layout();
+    window.addEventListener('resize', layout);
+  </script>
 </body>
 </html>
