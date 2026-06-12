@@ -1335,8 +1335,9 @@ function bindToolbar() {
   document.getElementById('btn-preview').addEventListener('click',      previewHTML);
   document.getElementById('btn-export').addEventListener('click',       exportHTML);
   document.getElementById('btn-export-print').addEventListener('click',  exportPrint);
-  document.getElementById('btn-export-pdf').addEventListener('click',    exportPDF);
-  document.getElementById('btn-export-twoup').addEventListener('click',  exportTwoUp);
+  document.getElementById('btn-export-pdf').addEventListener('click',         exportPDF);
+  document.getElementById('btn-export-digital-pdf').addEventListener('click', exportDigitalPDF);
+  document.getElementById('btn-export-twoup').addEventListener('click',        exportTwoUp);
 }
 
 function applyText(prop, val) {
@@ -2235,6 +2236,25 @@ function applyBrightness(dataUrl, factor) {
   });
 }
 
+// Crop a rendered PNG data URL to the safe content area by removing the 0.25" bleed
+// zone from each edge. Used for digital PDF only — print exports keep the full bleed.
+function cropToSafeArea(dataUrl) {
+  const m = Math.round(0.25 * PRINT_DPI); // 75px at 300 DPI
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const cw = img.naturalWidth  - 2 * m;
+      const ch = img.naturalHeight - 2 * m;
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, cw);
+      c.height = Math.max(1, ch);
+      c.getContext('2d').drawImage(img, m, m, cw, ch, 0, 0, cw, ch);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.src = dataUrl;
+  });
+}
+
 // Render a section for vector PDF export: background PNG (no text) + text data.
 function renderSectionForPdf(sec, multiplier) {
   return new Promise((resolve, reject) => {
@@ -2432,6 +2452,37 @@ async function exportPDF() {
   const { destPath, logs: mainLogs } = ipcResult || {};
   (mainLogs || []).forEach(l => console.log('[main]', l));
   setStatus(`PDF export: ${pdfSections.length} page${pdfSections.length !== 1 ? 's' : ''} → ${destPath || '(no path)'}`);
+}
+
+/* Digital PDF: sRGB raster, content cropped to the safe area (0.25" bleed removed from
+   each edge). Page size = trim size: 5.50" × 8.00" (6.00" - 0.50" × 8.50" - 0.50"). */
+async function exportDigitalPDF() {
+  const destDir = await window.editorAPI.exportDir();
+  if (!destDir) return;
+
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
+
+  const total = sections.length;
+  const images = [];
+  for (let i = 0; i < total; i++) {
+    setStatus(`Rendering section ${i + 1}/${total} for digital PDF…`);
+    const dataUrl = await renderSectionToDataUrl(sections[i], PRINT_MULTIPLIER);
+    const cropped = await cropToSafeArea(dataUrl);
+    images.push({ dataUrl: cropped });
+  }
+
+  setStatus('Assembling digital PDF…');
+  const safeWIn = PRINT_W_IN - 0.50; // 5.50" — 6.00" minus 0.25" bleed on each side
+  const safeHIn = PRINT_H_IN - 0.50; // 8.00" — 8.50" minus 0.25" bleed on each side
+  try {
+    const destPath = await window.editorAPI.exportToPdf(
+      destDir, images, { wIn: safeWIn, hIn: safeHIn, filename: 'brochure-digital.pdf' }
+    );
+    setStatus(`Digital PDF: ${total} page${total !== 1 ? 's' : ''} → ${destPath}`);
+  } catch (err) {
+    setStatus(`Digital PDF export failed: ${err && err.message}`);
+  }
 }
 
 /* Two-Up PNG: sections 4 + 5 side-by-side on 12"×8.5" landscape at 300 DPI.
@@ -2908,7 +2959,8 @@ function bindMenuEvents() {
   api.onMenu('menu:save-as',   () => saveProject(true));
   api.onMenu('menu:export',       () => exportHTML());
   api.onMenu('menu:export-print', () => exportPrint());
-  api.onMenu('menu:export-pdf',   () => exportPDF());
+  api.onMenu('menu:export-pdf',         () => exportPDF());
+  api.onMenu('menu:export-digital-pdf', () => exportDigitalPDF());
   api.onMenu('menu:undo',      () => undo());
   api.onMenu('menu:redo',      () => redo());
   api.onMenu('menu:delete',    () => deleteSelected());

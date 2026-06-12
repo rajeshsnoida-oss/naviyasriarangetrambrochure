@@ -136,6 +136,7 @@ function buildMenu() {
         { label: 'Export to HTML/CSS…', accelerator: 'CmdOrCtrl+E',       click: () => mainWindow.webContents.send('menu:export') },
         { label: 'Export for Print (PNG)…', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow.webContents.send('menu:export-print') },
         { label: 'Export PDF (CMYK)…',      accelerator: 'CmdOrCtrl+Shift+D', click: () => mainWindow.webContents.send('menu:export-pdf') },
+        { label: 'Export Digital PDF (sRGB)…', accelerator: 'CmdOrCtrl+Shift+G', click: () => mainWindow.webContents.send('menu:export-digital-pdf') },
         { type: 'separator' },
         { role: 'quit' },
       ],
@@ -251,13 +252,13 @@ ipcMain.handle('export:savePrintImages', async (_e, dir, images) => {
 // the screen exactly. Print shops' RIPs convert to press CMYK with ICC
 // profiles, which is more accurate than a profile-less software conversion.
 ipcMain.handle('export:toPdf', async (_e, dir, images, spec) => {
-  const { wIn = 6, hIn = 8.5 } = spec || {};
+  const { wIn = 6, hIn = 8.5, filename = 'brochure-print.pdf' } = spec || {};
   const PT_PER_IN = 72;
   const pageW = wIn * PT_PER_IN;
   const pageH = hIn * PT_PER_IN;
 
   fs.mkdirSync(dir, { recursive: true });
-  const destPath = path.join(dir, 'brochure-print.pdf');
+  const destPath = path.join(dir, filename);
 
   const doc = new PDFDocument({
     autoFirstPage: false,
