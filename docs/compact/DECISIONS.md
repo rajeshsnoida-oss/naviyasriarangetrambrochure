@@ -791,6 +791,32 @@
   11×17). The print shop or customer must order a custom-size print. Output filename is
   `brochure-twoup.png`.
 
+## D-057 — Digital PDF: sRGB raster + bleed-cropped to trim size; shared export:toPdf handler
+
+- **Date:** 2026-06-12
+- **Status:** decided
+- **Context:** Two distinct PDF use cases emerged: (1) print shops need the existing CMYK
+  vector PDF (`brochure-print.pdf`); (2) sharing via email/web needs a screen-faithful PDF
+  without the 0.25" print-bleed zone visible as blank margins on each edge.
+- **Decision:** Add a "Digital PDF" export path that renders each section at 300 DPI, crops
+  75 px (= 0.25" × 300 DPI) from each edge via `cropToSafeArea()`, and embeds the cropped
+  PNG as sRGB via pdfkit native image support (no CMYK conversion). Output is
+  `brochure-digital.pdf` at 5.50"×8.00" (trim size). Reuses the existing `export:toPdf`
+  IPC handler, extended with an optional `filename` param (defaults to `brochure-print.pdf`
+  for backward compatibility). Wired to a "Digital PDF" toolbar button and
+  `File → Export Digital PDF (sRGB)…` menu item (Ctrl+Shift+G).
+- **Why not alternatives:**
+  - *Use the CMYK vector PDF for digital*: CMYK values shift visibly on screen; digital
+    viewers don't apply ICC profiles, so colors look desaturated/dark.
+  - *Add a separate IPC handler*: unnecessary — `export:toPdf` already does sRGB PNG
+    embedding; a `filename` param is the minimum change to distinguish outputs.
+  - *Export full bleed for digital*: the 0.25" bleed zone shows as empty/overflow margins
+    in PDF viewers, which looks like a layout error to digital recipients.
+- **Consequences:** Two PDFs with different page dimensions: `brochure-print.pdf` at
+  6.00"×8.50" (with bleed) and `brochure-digital.pdf` at 5.50"×8.00" (trim size).
+  Digital PDF is raster-only (no vector text); acceptable for screen sharing but not
+  suitable for accessibility tools that need selectable text.
+
 <!--
 Template for new entries:
 
