@@ -506,17 +506,17 @@
 <div class="modal-overlay" id="preview-modal">
   <div class="modal-box" style="max-width:96vw;max-height:92vh;display:flex;flex-direction:column;width:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <div class="modal-title" style="margin:0;">Preview</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="modal-title" style="margin:0;">Preview</div>
+        <button class="tb-btn active" id="prev-tab-desktop" onclick="switchPreviewTab('desktop')">◻ Desktop</button>
+        <button class="tb-btn"        id="prev-tab-mobile"  onclick="switchPreviewTab('mobile')">📱 Mobile</button>
+      </div>
       <button class="tb-btn" onclick="closeModal('preview-modal')">✕ Close</button>
     </div>
-    <div class="prev-frames">
+    <div style="display:flex;justify-content:center;padding:8px 0;overflow:auto;">
       <div class="prev-col">
-        <div class="prev-col-lbl">◻ Desktop (1280 × 720)</div>
-        <div id="prev-desktop" class="prev-viewport desktop"></div>
-      </div>
-      <div class="prev-col">
-        <div class="prev-col-lbl">📱 Mobile (390 × 844)</div>
-        <div id="prev-mobile" class="prev-viewport mobile"></div>
+        <div class="prev-col-lbl" id="prev-frame-label">◻ Desktop (1280 × 720)</div>
+        <div id="prev-frame" class="prev-viewport desktop"></div>
       </div>
     </div>
   </div>
@@ -1058,15 +1058,31 @@ function loadProject(e) {
 
 /* ── Preview ─────────────────────────────────────────────────────── */
 function openPreview() {
-  const canvasDataUrl = canvas.toDataURL({ format: 'png', multiplier: 1 });
-  renderPreviewDevice('prev-desktop', canvasDataUrl, 1280, 720, 'desktop');
-  renderPreviewDevice('prev-mobile',  canvasDataUrl, 390,  844, 'mobile');
   document.getElementById('preview-modal').classList.add('open');
+  switchPreviewTab(editLayout);
+}
+
+function switchPreviewTab(tab) {
+  document.getElementById('prev-tab-desktop').classList.toggle('active', tab === 'desktop');
+  document.getElementById('prev-tab-mobile').classList.toggle('active', tab === 'mobile');
+
+  const frame = document.getElementById('prev-frame');
+  const label = document.getElementById('prev-frame-label');
+  if (tab === 'desktop') {
+    frame.className = 'prev-viewport desktop';
+    label.textContent = '◻ Desktop (1280 × 720)';
+    renderPreviewDevice('prev-frame', canvas.toDataURL({ format: 'png', multiplier: 1 }), 1280, 720, 'desktop');
+  } else {
+    frame.className = 'prev-viewport mobile';
+    label.textContent = '📱 Mobile (390 × 844)';
+    renderPreviewDevice('prev-frame', canvas.toDataURL({ format: 'png', multiplier: 1 }), 390, 844, 'mobile');
+  }
 }
 
 function renderPreviewDevice(containerId, canvasDataUrl, vpW, vpH, layout) {
   const container = document.getElementById(containerId);
-  const PREV_SCALE = 0.5;
+  // Scale the simulated viewport to a comfortable display size (max 660px wide or 580px tall)
+  const PREV_SCALE = Math.min(660 / vpW, 580 / vpH, 1);
   const dispW = Math.round(vpW * PREV_SCALE);
   const dispH = Math.round(vpH * PREV_SCALE);
   container.style.width  = dispW + 'px';
