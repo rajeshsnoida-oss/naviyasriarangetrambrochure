@@ -817,6 +817,37 @@
   Digital PDF is raster-only (no vector text); acceptable for screen sharing but not
   suitable for accessibility tools that need selectable text.
 
+## D-058 — HTML export bleed trim: nested-div offset rather than coordinate shifting
+
+- **Date:** 2026-06-12
+- **Status:** decided
+- **Context:** The HTML export (exportHTML) renders each brochure section as a
+  `<section>` with absolutely-positioned children whose `left`/`top` values are
+  Fabric canvas coordinates (origin at the full 794px-wide canvas, including the
+  0.25" print-bleed zone on each side). The deployed brochure should not show the
+  bleed margin — content should appear cropped to the 728px safe area, mirroring
+  what cropToSafeArea() does for the Digital PDF.
+- **Decision:** Wrap all section content in an inner `<div>` sized at the full
+  canvas dimensions (794×sec.height) and offset by `left:-33px; top:-33px` inside
+  an outer `<section>` container sized to the safe area (728×(sec.height−66)px)
+  with `overflow:hidden`. The bgStyle (background color/gradient/image) is applied
+  to the inner div so it renders at full-canvas scale and clips at the safe-area
+  boundary. Object coordinates in objectToHTML are not changed.
+- **Why not alternatives:**
+  - *Shift object coordinates in objectToHTML*: would require subtracting
+    SAFE_MARGIN_PX from every `left`/`top` in three branches (text, image, shape)
+    plus glow positioning in buildGlowsHTML, and would change the coordinate
+    origin — adding cognitive load and a divergence between canvas coordinates and
+    HTML coordinates that would be easy to break in future edits.
+  - *Filter out objects in the bleed zone*: incorrect — objects partially in the
+    bleed zone (e.g. a border image starting at x=10) must be clipped, not dropped.
+- **Consequences:** Each exported section has one extra wrapper `<div>` in the DOM.
+  The outer `<section>` has no background of its own — background CSS lives on the
+  inner div. The responsive scale threshold in the inline JS must match the trimmed
+  width (728px) not the canvas width (794px), or scaling kicks in too early on
+  medium-width viewports. previewHTML is intentionally unchanged (shows full bleed
+  for safe-area reference).
+
 <!--
 Template for new entries:
 
