@@ -1124,8 +1124,13 @@ function renderPreviewDevice(containerId, canvasDataUrl, vpW, vpH, layout) {
     }
   }).join('');
 
+  const pageBgColor = document.getElementById('pg-bg').value || '#1a0a2e';
+  const bgStyle = pageBgDataUrl
+    ? `background:${pageBgColor};background-image:url('${pageBgDataUrl}');background-size:cover;background-position:center;`
+    : `background:${pageBgColor};`;
+
   container.innerHTML = `
-    <div style="position:absolute;inset:0;background:#1a0a2e;overflow:hidden;">
+    <div style="position:absolute;inset:0;${bgStyle}overflow:hidden;">
       ${canvasDataUrl ? `<img src="${canvasDataUrl}" style="
         position:absolute;
         left:${pageLeft}px;top:${pageTop}px;
