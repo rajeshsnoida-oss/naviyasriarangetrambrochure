@@ -2019,11 +2019,15 @@ async function exportHTML() {
     const images    = [];
     const seenNames = new Set();
 
+    const safeW = CANVAS_W - 2 * SAFE_MARGIN_PX;
     const sectionsHTML = sections.map(sec => {
       const bgStyle     = buildBgStyleForFolder(sec, seenNames, images);
+      const safeH       = sec.height - 2 * SAFE_MARGIN_PX;
       const objsHtmlArr = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames));
       const children    = mergeGlowsIntoHTML(objsHtmlArr, buildGlowsHTML(sec)).join('\n');
-      return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;margin:0 auto 12px;">\n${children}\n  </section>`;
+      return `  <section class="bs" style="width:${safeW}px;height:${safeH}px;position:relative;overflow:hidden;margin:0 auto 12px;">\n` +
+        `    <div style="position:absolute;left:-${SAFE_MARGIN_PX}px;top:-${SAFE_MARGIN_PX}px;width:${CANVAS_W}px;height:${sec.height}px;${bgStyle}">\n` +
+        `${children}\n    </div>\n  </section>`;
     }).join('\n\n');
 
     const googleFontsUrl = buildGoogleFontsUrl(usedFonts);
@@ -2055,7 +2059,7 @@ ${sectionsHTML}
 </div></div>
 <script>
 (function(){
-  var W=${CANVAS_W};
+  var W=${CANVAS_W - 2 * SAFE_MARGIN_PX};
   function fit(){
     var vw=window.innerWidth;
     if(vw>=W)return;
