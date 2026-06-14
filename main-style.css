@@ -21,8 +21,8 @@ body {
 .phone-page {
   position: relative;
   width: 100%;
-  max-width: 430px;
-  min-height: 100vh;
+  max-width: 100%;
+  min-height: 100%;
   aspect-ratio: 9/16
   margin: 0 auto;
 
