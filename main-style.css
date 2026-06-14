@@ -10,21 +10,17 @@ html,
 body {
   margin: 0;
   padding: 0;
-  min-height: 100%;
+  height: 100%;
   background: #111;
   font-family: Georgia, "Times New Roman", serif;
   overflow-x: hidden;
-  overflow-y: auto;
 }
 
 /* Mobile poster layout */
 .phone-page {
-  position: relative;
+  position: relative;       /* anchors all absolute children */
   width: 100%;
-  max-width: 100%;
-  min-height: 100%;
-  aspect-ratio: 9/16
-  margin: 0 auto;
+  min-height: 100vh;        /* full viewport height */
 
   background-image:
     linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.28)),
@@ -32,29 +28,22 @@ body {
   background-size: cover;
   background-position: top center;
   background-repeat: no-repeat;
-  /*overflow-y: auto;*/
-  overflow: visible; /*important */
 }
-
-/* Use this for a fixed phone-poster ratio instead of full screen */
-/*
-.phone-page {
-  aspect-ratio: 9 / 16;
-  min-height: auto;
-}
-*/
 
 
 /* ==============================
    Instagram Link
    ============================== */
+.instagram-link {
+  position: absolute;
+  top: 2%;
+  right: 4%;
+}
+
 .instagram-link img {
+  display: block;
   width: 32px;
   height: 32px;
-  /*filter: brightness(0) saturate(100%)
-          invert(80%) sepia(25%)
-          saturate(600%)
-          hue-rotate(5deg);*/
 }
 
 
@@ -86,15 +75,28 @@ body {
 
 
 /* ==============================
+   Button Group
+   Positions both buttons as a unit.
+   Change left/top here to move them together.
+   ============================== */
+
+.button-group {
+  position: absolute;
+  left: 62%;
+  top: 40%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+
+/* ==============================
    Button Styling
-   Modify button look here
    ============================== */
 
 .event-button {
-  position: absolute;
-  z-index: 10;
-
-  min-width: 190px;
+  display: block;
+  min-width: 180px;
   padding: 13px 22px;
 
   color: #fff8dc;
@@ -103,7 +105,7 @@ body {
   border: 1.5px solid #d6ad4c;
   border-radius: 999px;
 
-  font-size: 16px;
+  font-size: 15px;
   font-weight: bold;
   font-family: Georgia, "Times New Roman", serif;
   letter-spacing: 0.3px;
@@ -114,97 +116,59 @@ body {
   box-shadow:
     0 5px 16px rgba(0, 0, 0, 0.45),
     inset 0 0 12px rgba(255, 220, 120, 0.15);
+
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 
 .event-button:hover,
 .event-button:focus {
   background: linear-gradient(135deg, rgba(125, 15, 38, 0.96), rgba(180, 48, 55, 0.96));
   transform: translateY(-1px);
+  outline: none;
 }
 
 
-/* ==============================
-   Button Positions
-   Change x/y coordinates here
-   left = x coordinate
-   top  = y coordinate
-   ============================== */
-/* Instagram icon */
-.instagram-link {
-  position: absolute;
-  top: 2%;
-  right: 4%;
-}
-
-/* Live Stream button */
-.live-streaming {
-  position: absolute;
-  left: 65%;
-  top: 40%;
-}
-
-/* Program Brochure button */
-.program-brochure {
-  position: absolute;
-  left: 64%;
-  top: 47%;
-}
-
-/*@media (orientation: landscape) {
-  .live-streaming { top: 40%; left: 85%; }
-  .program-brochure { top: 49%; left: 85%; }
-}*/
 /* ==============================
    Small Screen Adjustments
    ============================== */
 
 @media (max-width: 360px) {
   .event-button {
-    min-width: 120px;
-    font-size: 10px;
-    padding: 8px 12px;
+    min-width: 130px;
+    font-size: 12px;
+    padding: 10px 14px;
   }
 
   .page-title h1 {
-    font-size: 26px;
+    font-size: 24px;
   }
 }
 
-/* Landscape phones */
-@media screen and (orientation: landscape) {
 
+/* ==============================
+   Landscape Orientation
+   ============================== */
+
+@media screen and (orientation: landscape) {
   .phone-page {
-    min-height: 1200px;
-    max-width: 100%;
-    /*overflow-y: auto;*/
-    overflow: visible;
+    min-height: 100vh;
+    background-position: center center;
   }
 
   .page-title {
-    top: 8%;
+    top: 6%;
+    font-size: 0.9em;
   }
 
-  .live-streaming {
-    position: absolute;
-    top: 40%;
-    left: 70%;
-   /* transform: translateX(-50%);*/
+  .button-group {
+    top: 30%;
+    left: 65%;
+    gap: 10px;
   }
 
-  .program-brochure {
-    position: absolute;
-    top: 45%;
-    left: 70%;
-    /*transform: translateX(-50%);*/
-  }
-
-  .rsvp-button {
-    top: 85%;
-    left: 75%;
-    transform: translateX(-50%);
-  }
-  
-  body {
-    overflow-y: scroll;
+  .event-button {
+    font-size: 13px;
+    padding: 10px 18px;
+    min-width: 150px;
   }
 }
