@@ -1,0 +1,210 @@
+/* ==============================
+   Main Page Settings
+   ============================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: #111;
+  font-family: Georgia, "Times New Roman", serif;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Mobile poster layout */
+.phone-page {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100vh;
+  aspect-ratio: 9/16
+  margin: 0 auto;
+
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.28)),
+    url("images/background.jpg");
+  background-size: cover;
+  background-position: top center;
+  background-repeat: no-repeat;
+  /*overflow-y: auto;*/
+  overflow: visible; /*important */
+}
+
+/* Use this for a fixed phone-poster ratio instead of full screen */
+/*
+.phone-page {
+  aspect-ratio: 9 / 16;
+  min-height: auto;
+}
+*/
+
+
+/* ==============================
+   Instagram Link
+   ============================== */
+.instagram-link img {
+  width: 32px;
+  height: 32px;
+  /*filter: brightness(0) saturate(100%)
+          invert(80%) sepia(25%)
+          saturate(600%)
+          hue-rotate(5deg);*/
+}
+
+
+/* ==============================
+   Optional Title Text
+   ============================== */
+
+.page-title {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 12%;
+  text-align: center;
+  color: #f7df9a;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.8);
+}
+
+.page-title .small-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.page-title h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+
+/* ==============================
+   Button Styling
+   Modify button look here
+   ============================== */
+
+.event-button {
+  position: absolute;
+  z-index: 10;
+
+  min-width: 190px;
+  padding: 13px 22px;
+
+  color: #fff8dc;
+  background: linear-gradient(135deg, rgba(92, 8, 28, 0.92), rgba(148, 34, 42, 0.92));
+
+  border: 1.5px solid #d6ad4c;
+  border-radius: 999px;
+
+  font-size: 16px;
+  font-weight: bold;
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0.3px;
+
+  text-align: center;
+  text-decoration: none;
+
+  box-shadow:
+    0 5px 16px rgba(0, 0, 0, 0.45),
+    inset 0 0 12px rgba(255, 220, 120, 0.15);
+}
+
+.event-button:hover,
+.event-button:focus {
+  background: linear-gradient(135deg, rgba(125, 15, 38, 0.96), rgba(180, 48, 55, 0.96));
+  transform: translateY(-1px);
+}
+
+
+/* ==============================
+   Button Positions
+   Change x/y coordinates here
+   left = x coordinate
+   top  = y coordinate
+   ============================== */
+/* Instagram icon */
+.instagram-link {
+  position: absolute;
+  top: 2%;
+  right: 4%;
+}
+
+/* Live Stream button */
+.live-streaming {
+  position: absolute;
+  left: 65%;
+  top: 40%;
+}
+
+/* Program Brochure button */
+.program-brochure {
+  position: absolute;
+  left: 64%;
+  top: 47%;
+}
+
+/*@media (orientation: landscape) {
+  .live-streaming { top: 40%; left: 85%; }
+  .program-brochure { top: 49%; left: 85%; }
+}*/
+/* ==============================
+   Small Screen Adjustments
+   ============================== */
+
+@media (max-width: 360px) {
+  .event-button {
+    min-width: 120px;
+    font-size: 10px;
+    padding: 8px 12px;
+  }
+
+  .page-title h1 {
+    font-size: 26px;
+  }
+}
+
+/* Landscape phones */
+@media screen and (orientation: landscape) {
+
+  .phone-page {
+    min-height: 1200px;
+    max-width: 100%;
+    /*overflow-y: auto;*/
+    overflow: visible;
+  }
+
+  .page-title {
+    top: 8%;
+  }
+
+  .live-streaming {
+    position: absolute;
+    top: 40%;
+    left: 70%;
+   /* transform: translateX(-50%);*/
+  }
+
+  .program-brochure {
+    position: absolute;
+    top: 45%;
+    left: 70%;
+    /*transform: translateX(-50%);*/
+  }
+
+  .rsvp-button {
+    top: 85%;
+    left: 75%;
+    transform: translateX(-50%);
+  }
+  
+  body {
+    overflow-y: scroll;
+  }
+}
