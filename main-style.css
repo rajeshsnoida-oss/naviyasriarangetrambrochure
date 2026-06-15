@@ -1,4 +1,4 @@
-/* ==============================
+﻿/* ==============================
    Main Page Settings
    ============================== */
 
@@ -10,7 +10,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  min-height: 100%;   /* allows page to grow beyond viewport height */
   background: #111;
   font-family: Georgia, "Times New Roman", serif;
   overflow-x: hidden;
@@ -18,9 +18,13 @@ body {
 
 /* Mobile poster layout */
 .phone-page {
-  position: absolute;       /* anchors all absolute children */
+  position: relative;        /* anchors all absolute children */
   width: 100%;
-  min-height: 100vh;        /* full viewport height */
+  /* max() ensures page is always tall enough to show the full portrait background
+     image (2256Ã—3360px). 149vw = (3360/2256)Ã—100vw â€” the scaled image height
+     when cover fills the viewport width. Falls back to 100vh on portrait screens
+     where the image already fits vertically. */
+  min-height: max(100vh, 149vw);
 
   background-image:
     linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.28)),
@@ -32,12 +36,30 @@ body {
 
 
 /* ==============================
-   Instagram Link
+   Top Bar
+   Buttons sit to the LEFT of the Instagram icon.
+   Move the whole unit by changing top / right here.
    ============================== */
-.instagram-link {
+
+.top-bar {
   position: absolute;
   top: 2%;
   right: 4%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.button-group {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+}
+
+.instagram-link {
+  flex-shrink: 0;
+  line-height: 0;          /* removes extra inline gap below img */
 }
 
 .instagram-link img {
@@ -75,29 +97,13 @@ body {
 
 
 /* ==============================
-   Button Group
-   Positions both buttons as a unit.
-   Change left/top here to move them together.
-   ============================== */
-
-.button-group {
-  position: absolute;
-  left: 68%;
-  top: 2%;
-  display: flex;
-  flex-direction: row;
-  gap: 14px;
-}
-
-
-/* ==============================
    Button Styling
    ============================== */
 
 .event-button {
   display: block;
-  min-width: 180px;
-  padding: 13px 22px;
+  min-width: 160px;
+  padding: 12px 20px;
 
   color: #fff8dc;
   background: linear-gradient(135deg, rgba(92, 8, 28, 0.92), rgba(148, 34, 42, 0.92));
@@ -112,6 +118,7 @@ body {
 
   text-align: center;
   text-decoration: none;
+  white-space: nowrap;
 
   box-shadow:
     0 5px 16px rgba(0, 0, 0, 0.45),
@@ -129,52 +136,53 @@ body {
 
 
 /* ==============================
-   Small Screen Adjustments
+   Small phones (portrait â‰¤ 480px)
+   Compact buttons so the top bar fits the narrow viewport.
    ============================== */
 
-@media (max-width: 360px) {
-  .event-button {
-    min-width: 60px;
-    font-size: 10px;
-    padding: 10px 14px;
+@media (max-width: 480px) {
+  .top-bar {
+    gap: 10px;
   }
 
-  .page-title h1 {
-    font-size: 24px;
+  .button-group {
+    gap: 8px;
+  }
+
+  .event-button {
+    min-width: 100px;
+    font-size: 11px;
+    padding: 8px 12px;
   }
 }
 
 
 /* ==============================
-   Landscape Orientation
+   Phone landscape only (â‰¤ 500px tall)
+   Slightly smaller buttons; layout stays the same.
    ============================== */
 
-@media screen and (orientation: landscape) {
-  .phone-page {
-    width: 100%;
-    min-height: 320vh;
-    background-position: top center;
-  }
-
-  .page-title {
-    top: 6%;
-    font-size: 0.9em;
-  }
-
+@media screen and (orientation: landscape) and (max-height: 500px) {
   .event-button {
-    font-size: 13px;
-    padding: 10px 18px;
-    min-width: 100px;
+    min-width: 110px;
+    font-size: 12px;
+    padding: 8px 14px;
   }
 }
 
-@media screen and (orientation: landscape) and (max-height: 430) {
-  .button-group {
-    position: absolute;
-    left: 64%;
-    top: 2%;
-    display: flex;
-    flex-direction: row;
-    gap: 14px;
+
+/* ==============================
+   PC / large tablet (â‰¥ 769px wide)
+   Center a 728px column on the dark background,
+   matching the brochure.html layout width.
+   Override min-height: 149vw â€” that formula is for
+   full-viewport-width elements; at 728px, 100vh is enough.
+   ============================== */
+
+@media (min-width: 769px) {
+  .phone-page {
+    max-width: 728px;
+    margin: 0 auto;
+    min-height: 100vh;
   }
 }
