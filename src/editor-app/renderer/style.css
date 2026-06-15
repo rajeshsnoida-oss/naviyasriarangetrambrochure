@@ -397,6 +397,99 @@ body {
 }
 #status-project { color: #ddd; font-size: 10px; }
 
+/* ── Crop modal ─────────────────────────────────────────────────────────── */
+#crop-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.78);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+#crop-overlay.open { display: flex; }
+
+#crop-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+#crop-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#crop-info {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+#crop-workspace {
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#crop-image-host {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+#crop-img {
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+#crop-rect {
+  position: absolute;
+  border: 2px solid rgba(255,255,255,0.9);
+  box-shadow: 0 0 0 1000px rgba(0,0,0,0.45);
+  cursor: move;
+  box-sizing: border-box;
+  /* Rule-of-thirds grid lines */
+  background-image:
+    linear-gradient(to right,  transparent calc(33.33% - 0.5px), rgba(255,255,255,0.25) calc(33.33% - 0.5px), rgba(255,255,255,0.25) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.67% - 0.5px), rgba(255,255,255,0.25) calc(66.67% - 0.5px), rgba(255,255,255,0.25) calc(66.67% + 0.5px), transparent calc(66.67% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.33% - 0.5px), rgba(255,255,255,0.25) calc(33.33% - 0.5px), rgba(255,255,255,0.25) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.67% - 0.5px), rgba(255,255,255,0.25) calc(66.67% - 0.5px), rgba(255,255,255,0.25) calc(66.67% + 0.5px), transparent calc(66.67% + 0.5px));
+}
+
+.ch {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.35);
+  box-sizing: border-box;
+}
+.ch.nw { left: -5px;               top: -5px;               cursor: nwse-resize; }
+.ch.n  { left: calc(50% - 5px);    top: -5px;               cursor: ns-resize;   }
+.ch.ne { right: -5px;              top: -5px;               cursor: nesw-resize; }
+.ch.e  { right: -5px;              top: calc(50% - 5px);    cursor: ew-resize;   }
+.ch.se { right: -5px;              bottom: -5px;            cursor: nwse-resize; }
+.ch.s  { left: calc(50% - 5px);   bottom: -5px;            cursor: ns-resize;   }
+.ch.sw { left: -5px;              bottom: -5px;             cursor: nesw-resize; }
+.ch.w  { left: -5px;              top: calc(50% - 5px);    cursor: ew-resize;   }
+
+#crop-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 /* ── Font manager modal ─────────────────────────────────────────────────── */
 #font-mgr-overlay {
   display: none;

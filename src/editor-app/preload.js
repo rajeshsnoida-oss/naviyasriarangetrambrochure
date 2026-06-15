@@ -9,7 +9,9 @@ contextBridge.exposeInMainWorld('editorAPI', {
   openImages:   ()             => ipcRenderer.invoke('dialog:openImages'),
   exportDir:        ()             => ipcRenderer.invoke('dialog:exportDir'),
   savePrintImages:  (dir, images)              => ipcRenderer.invoke('export:savePrintImages', dir, images),
-  exportToPdf:      (dir, images, spec)        => ipcRenderer.invoke('export:toPdf', dir, images, spec),
+  exportToPdf:         (dir, images, spec)              => ipcRenderer.invoke('export:toPdf', dir, images, spec),
+  exportToPdfVector:   (dir, sections, fonts, spec)    => ipcRenderer.invoke('export:toPdfVector', dir, sections, fonts, spec),
+  exportTwoUp:         (dir, images)                  => ipcRenderer.invoke('export:twoUp', dir, images),
   copyImages:   (dir, imgs)    => ipcRenderer.invoke('dialog:copyImages', dir, imgs),
   readClipboardText: ()        => ipcRenderer.invoke('clipboard:readText'),
   previewOpen:       (html)                    => ipcRenderer.invoke('preview:open', html),
@@ -29,7 +31,7 @@ contextBridge.exposeInMainWorld('editorAPI', {
   clearAssetDir:  ()              => ipcRenderer.invoke('asset:clearDir'),
 
   onMenu: (channel, fn) => {
-    const valid = ['menu:new','menu:open','menu:save','menu:save-as','menu:export','menu:export-print','menu:export-pdf',
+    const valid = ['menu:new','menu:open','menu:save','menu:save-as','menu:export','menu:export-print','menu:export-pdf','menu:export-digital-pdf',
                    'menu:undo','menu:redo','menu:delete','menu:duplicate',
                    'menu:zoom-in','menu:zoom-out','menu:zoom-fit'];
     if (valid.includes(channel)) ipcRenderer.on(channel, fn);

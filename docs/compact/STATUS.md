@@ -1,7 +1,7 @@
 # Status
 
 **Active phase**: development
-**Last updated**: 2026-06-03
+**Last updated**: 2026-06-12
 **Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
@@ -57,16 +57,23 @@
 - 2026-05-31 Editor: Google Font manager — "＋ Font" button in text toolbar opens modal to search/load/preview any Google Font by name; fonts persisted in app-global settings; settings:set fixed to merge-not-overwrite so font list survives project saves; D-048
 - 2026-06-01 Editor: justify text overflow fixed — applyCSSJustification now uses measureLine(a).width (Canvas2D natural line width) for surplus instead of CSS DOM measurement; charBounds sum exactly to obj.width; removed _cssJustCache, _cssLineWidth, and clip-patch workaround; D-049
 - 2026-06-03 Editor: image scale not retained across section switches fixed — fabric.Object.NUM_FRACTION_DIGITS raised 2→4 in initCanvas(); prevents rounding of scaleX/scaleY to 2 d.p. on every toJSON() call during section switch; D-051
+- 2026-06-05 Editor: vector PDF text rendering — TTF font fetch (Google Fonts v1/v2 with unicode-range subset picking); Noto Sans Tamil for Tamil characters; line-by-line layout (lineBreak:false) matching Fabric Canvas2D metrics; paragraph-end justify detection (computeParaEndFlags); y-clamp for near-top objects; D-052, D-053
+- 2026-06-05 Editor: Two-Up PNG export — sections 4+5 side-by-side on 12"×8.5" landscape (3600×2550px @ 300 DPI); height-filling multiplier per section (2550/sec.height); RGB colors preserved, no CMYK conversion; D-054, D-055, D-056
 - 2026-06-01 Editor: bgImage bleed fixed — switchSection afterLoad + restoreHistory now call canvas.setBackgroundImage(null, …) when sec.bgImage is falsy, clearing previous section's background image on navigation; D-050
+- 2026-06-12 Editor: Digital PDF export (sRGB, bleed-cropped) — cropToSafeArea() removes 0.25" bleed (75px @ 300 DPI) from each edge; exportDigitalPDF() renders at print DPI, crops to 5.50"×8.00" trim size, embeds as sRGB PNG via pdfkit; output brochure-digital.pdf; "Digital PDF" toolbar button + Ctrl+Shift+G menu; export:toPdf gains optional filename param; D-057 logged
+- 2026-06-12 Editor: HTML export bleed trim — section container clipped to safe area (728×(sec.height−66)px); inner div at full canvas size offset −33px on each axis carries bgStyle + all objects; responsive scale threshold 794→728px; D-058 logged
 
 ## In progress
 
-- Canvas justify fix updated (D-049) — restart editor and verify wrapped lines show no character overflow; justification still visibly spreads text to fill line width
+- Test vector PDF export — verify text alignment, Tamil character rendering, and justify spacing in a PDF viewer
+- Test Digital PDF export — open brochure-digital.pdf, verify content is within 0.25" safe-area boundary and colors match screen
+- Test HTML export bleed trim — open exported index.html, verify 0.25" boundary is cropped, backgrounds fill correctly, no layout breaks
 
 ## Next
 
 - **Use the editor**: double-click `src\editor-app\start.bat`
 - Set canvas section height to 1124px for exact 6×8.5in print proportions (previously 1048px for old spec)
+- Test Two-Up PNG — open brochure-twoup.png, verify no white borders, full color, correct 12"×8.5" layout
 - Test CMYK PDF export — open in Adobe Acrobat Preflight to verify DeviceCMYK colorspace is present
 - If image quality looks soft on high-DPI phones, raise MAX_W 900→1350 in src/editor-app/main.js, re-export and push
 - `/switch-phase development feedback` — implement feedback module (Google Apps Script integration; highest risk)

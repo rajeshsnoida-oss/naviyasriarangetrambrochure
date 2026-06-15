@@ -66,6 +66,7 @@
   <!-- context: image selected -->
   <div class="tb-group ctx-image" id="tb-image-props">
     <button class="tb-btn accent" id="btn-cutout" title="AI Background Removal">✂ Cutout</button>
+    <button class="tb-btn" id="btn-crop" title="Crop image">⬚ Crop</button>
     <label>Opacity <input type="range" id="prop-opacity" min="0" max="100" value="100" style="width:80px"></label>
     <button class="tb-btn" id="btn-grayscale" title="Toggle grayscale">Grayscale</button>
     <label>Border
@@ -131,6 +132,8 @@
   <button class="tb-btn accent"  id="btn-export">Export HTML</button>
   <button class="tb-btn"         id="btn-export-print">Export PNG</button>
   <button class="tb-btn"         id="btn-export-pdf">Export PDF</button>
+  <button class="tb-btn"         id="btn-export-digital-pdf">Digital PDF</button>
+  <button class="tb-btn"         id="btn-export-twoup">Two-Up CMYK</button>
 </header>
 
 <!-- ── Main layout ─────────────────────────────────────────────────────── -->
@@ -209,6 +212,23 @@
         <option value="auto">Auto</option>
       </select>
     </label>
+    <div id="sp-glow-row" style="margin-top:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;font-weight:600;color:#ffd700">Golden Glow</span>
+        <button id="btn-add-glow" class="tb-btn" style="padding:2px 7px;font-size:11px">＋ Add</button>
+      </div>
+      <div id="sp-glow-list"></div>
+    </div>
+    <div id="sp-glitter-row" style="margin-top:6px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="sp-glitter-enabled"> Glitter
+      </label>
+      <div id="sp-glitter-settings" style="display:none;margin-top:4px">
+        <label style="display:block">Level
+          <input type="range" id="sp-glitter-level" min="1" max="100" value="50" style="width:100%;margin-top:2px">
+        </label>
+      </div>
+    </div>
     <hr>
     <button class="tb-btn" id="btn-apply-bg-all" title="Copy this section's background to all other sections">Apply bg to all sections</button>
     <button class="tb-btn danger" id="btn-delete-section">Delete Section</button>
@@ -227,6 +247,36 @@
     <div id="cutout-msg" style="font-size:14px;">Initialising AI…</div>
     <div id="cutout-progress" style="margin-top:12px; height:6px; background:#3e3e42; border-radius:3px; overflow:hidden;">
       <div id="cutout-bar" style="height:100%; background:#7b2d8b; width:0%; transition:width 0.3s;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Crop modal ──────────────────────────────────────────────────────── -->
+<div id="crop-overlay">
+  <div id="crop-modal">
+    <div id="crop-header">
+      <span style="font-size:14px;font-weight:600;color:var(--accent)">Crop Image</span>
+      <span id="crop-info"></span>
+      <button class="tb-btn" id="btn-crop-reset" title="Reset to full image">Reset</button>
+      <button class="tb-btn" id="btn-crop-cancel">Cancel</button>
+    </div>
+    <div id="crop-workspace">
+      <div id="crop-image-host">
+        <img id="crop-img" draggable="false" alt="">
+        <div id="crop-rect">
+          <div class="ch nw" data-pos="nw"></div>
+          <div class="ch n"  data-pos="n"></div>
+          <div class="ch ne" data-pos="ne"></div>
+          <div class="ch e"  data-pos="e"></div>
+          <div class="ch se" data-pos="se"></div>
+          <div class="ch s"  data-pos="s"></div>
+          <div class="ch sw" data-pos="sw"></div>
+          <div class="ch w"  data-pos="w"></div>
+        </div>
+      </div>
+    </div>
+    <div id="crop-footer">
+      <button class="tb-btn primary" id="btn-crop-apply">Apply Crop</button>
     </div>
   </div>
 </div>

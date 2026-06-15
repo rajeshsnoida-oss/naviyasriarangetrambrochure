@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitation Page Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Philosopher:ital,wght@0,400;0,700;1,400&family=Noto+Sans+Tamil&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --toolbar-h: 46px;
+      --panel-w: 210px;
+      --bg:        #111122;
+      --panel-bg:  #1c1c30;
+      --border:    #2e2e4a;
+      --accent:    #c9a84c;
+      --text:      #dde0f0;
+      --text-dim:  #777a99;
+      --btn-bg:    #26263d;
+      --btn-hover: #32324f;
+      --danger:    #b03030;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Toolbar ─────────────────────────── */
+    #toolbar {
+      height: var(--toolbar-h);
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 0 8px;
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+    .tb-btn {
+      background: var(--btn-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 4px 9px; cursor: pointer; font-size: 12px; white-space: nowrap;
+    }
+    .tb-btn:hover { background: var(--btn-hover); }
+    .tb-btn.accent { background: var(--accent); color: #1a0a00; border-color: var(--accent); font-weight: 600; }
+    .tb-btn.danger { background: var(--danger); border-color: var(--danger); }
+    .tb-btn.active { background: var(--accent); color: #1a0a00; }
+    .tb-sep { width: 1px; height: 26px; background: var(--border); margin: 0 3px; flex-shrink: 0; }
+    .tb-label { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+    select.tb-ctrl, input[type=number].tb-ctrl {
+      background: var(--btn-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 3px 5px; font-size: 12px;
+    }
+    input[type=number].tb-ctrl { width: 50px; }
+
+    /* ── Layout ──────────────────────────── */
+    #layout { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Panels ──────────────────────────── */
+    .panel {
+      width: var(--panel-w);
+      background: var(--panel-bg);
+      display: flex; flex-direction: column;
+      overflow-y: auto; flex-shrink: 0;
+      transition: width 0.2s ease;
+    }
+    .panel.collapsed { width: 0; overflow: hidden; }
+
+    .panel-tab {
+      width: 14px; flex-shrink: 0;
+      background: var(--panel-bg);
+      border: none; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+      cursor: pointer; color: var(--text-dim); font-size: 10px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0; user-select: none;
+    }
+    .panel-tab:hover { background: rgba(255,255,255,0.07); color: var(--text); }
+
+    .psec { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .psec-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--text-dim); margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .prow { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+    .prow label { font-size: 11px; color: var(--text-dim); min-width: 56px; }
+    .pinput {
+      flex: 1; background: var(--btn-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 3px 6px; font-size: 12px;
+    }
+    .pinput:focus { outline: 1px solid var(--accent); }
+
+    .link-item {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 0; font-size: 11px; border-bottom: 1px solid var(--border);
+    }
+    .link-item:last-child { border-bottom: none; }
+    .link-lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ico-btn {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; padding: 1px 4px; border-radius: 3px; font-size: 11px;
+    }
+    .ico-btn:hover { color: var(--danger); }
+
+    /* ── Canvas area ─────────────────────── */
+    #canvas-area {
+      flex: 1; position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #1a0a2e; /* updated by applyPageBg() to match pg-bg */
+    }
+    #layout-banner {
+      display: none; position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+      background: rgba(210,90,0,0.92); color: #fff;
+      font-size: 11px; font-weight: 600; text-align: center;
+      padding: 4px 8px; pointer-events: none;
+    }
+    /* ── Preview modal ───────────────────── */
+    .prev-frames { display: flex; gap: 20px; padding: 12px 0; overflow: auto; align-items: flex-start; }
+    .prev-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .prev-col-lbl { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+    .prev-viewport { position: relative; overflow: hidden; flex-shrink: 0; }
+    .prev-viewport.desktop { border: 2px solid var(--border); border-radius: 4px; }
+    .prev-viewport.mobile  { border: 7px solid #2a2a2a; border-radius: 24px; box-shadow: inset 0 0 0 1px #444; }
+    #canvas-wrap {
+      position: relative;
+      width: 900px;
+      height: 560px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.7);
+      transform-origin: center center;
+      background: #1a0a2e;
+    }
+    /* Fabric's container sits above the bg image */
+    #canvas-wrap .canvas-container {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      z-index: 1;
+    }
+    /* Background image fills the canvas-wrap */
+    #page-bg-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      display: none;
+      pointer-events: none;
+      user-select: none;
+    }
+    /* Individual draggable link buttons */
+    .link-widget {
+      position: absolute;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .widget-handle {
+      font-size: 11px;
+      color: rgba(255,255,255,0.55);
+      cursor: grab;
+      user-select: none;
+      height: 16px; line-height: 16px; padding: 0 3px;
+      border-radius: 2px;
+      background: rgba(0,0,0,0.3);
+    }
+    .widget-handle:hover { color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.6); }
+    .widget-handle.dragging { cursor: grabbing; }
+    .lnk-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      color: #fff;
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    }
+    .lnk-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 20px;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      text-decoration: none;
+      font-size: 12px;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    }
+
+    /* ── Status bar ──────────────────────── */
+    #statusbar {
+      height: 22px; padding: 0 10px; font-size: 11px;
+      color: var(--text-dim); display: flex; align-items: center;
+      background: var(--panel-bg); border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ── Modal ───────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--panel-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px; min-width: 300px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }
+    .modal-title { font-weight: 600; margin-bottom: 14px; color: var(--accent); }
+    .modal-btns { display: flex; gap: 8px; margin-top: 14px; }
+    .modal-btns .tb-btn { flex: 1; text-align: center; }
+  </style>
+</head>
+<body>
+
+<header id="toolbar">
+  <button class="tb-btn" onclick="addText()">＋ Text</button>
+  <button class="tb-btn" onclick="addImage()">＋ Image</button>
+  <button class="tb-btn" onclick="duplicateObj()">⧉</button>
+  <button class="tb-btn danger" onclick="deleteObj()">✕</button>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Font</span>
+  <select class="tb-ctrl" id="tb-font" onchange="applyFont()">
+    <option>Arial</option>
+    <option>Cinzel</option>
+    <option>Georgia</option>
+    <option>Philosopher</option>
+    <option>Palatino Linotype</option>
+    <option>Times New Roman</option>
+    <option>Trebuchet MS</option>
+    <option>Noto Sans Tamil</option>
+  </select>
+  <input type="number" class="tb-ctrl" id="tb-size" value="36" min="6" max="300" onchange="applyFontSize()">
+  <button class="tb-btn" id="btn-bold"   onclick="toggleBold()"><b>B</b></button>
+  <button class="tb-btn" id="btn-italic" onclick="toggleItalic()"><i>I</i></button>
+  <input type="color" id="tb-color" value="#ffffff" title="Text / Fill color"
+         onchange="applyColor()" style="width:26px;height:26px;border:none;cursor:pointer;background:none;padding:0;">
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Align</span>
+  <button class="tb-btn" onclick="setAlign('left')">⬤←</button>
+  <button class="tb-btn" onclick="setAlign('center')">⊙</button>
+  <button class="tb-btn" onclick="setAlign('right')">→⬤</button>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Opacity</span>
+  <input type="range" id="tb-opacity" min="5" max="100" value="100"
+         style="width:64px" oninput="applyOpacity()">
+
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="undo()" title="Ctrl+Z">↩</button>
+  <button class="tb-btn" onclick="redo()" title="Ctrl+Y">↪</button>
+
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="saveProject()" title="Ctrl+S">💾 Save</button>
+  <button class="tb-btn" onclick="document.getElementById('f-project').click()">📂 Load</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="openModal('font-modal')" title="Load a Google Font">＋ Font</button>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Layout</span>
+  <button class="tb-btn active" id="btn-layout-desktop" onclick="setEditLayout('desktop')" title="Edit desktop link positions">◻ Desktop</button>
+  <button class="tb-btn"        id="btn-layout-mobile"  onclick="setEditLayout('mobile')"  title="Edit mobile link positions">📱 Mobile</button>
+  <button class="tb-btn" onclick="openPreview()" title="Preview desktop and mobile layouts">👁 Preview</button>
+
+  <div class="tb-sep"></div>
+  <button class="tb-btn accent" onclick="exportZip()">⬇ Export ZIP</button>
+</header>
+
+<div id="layout">
+
+  <aside class="panel" id="left-panel">
+
+    <div class="psec">
+      <div class="psec-title">Page</div>
+      <div class="prow"><label>Title</label>
+        <input class="pinput" id="pg-title" type="text" placeholder="Invitation title…">
+      </div>
+      <div class="prow"><label>BG Color</label>
+        <input type="color" id="pg-bg" value="#1a0a2e"
+               onchange="applyPageBg()"
+               style="width:36px;height:24px;border:none;cursor:pointer;">
+      </div>
+      <div class="prow"><label>BG Image</label>
+        <button class="tb-btn" style="flex:1" onclick="document.getElementById('f-bgimg').click()">Set image…</button>
+        <button class="tb-btn" onclick="clearBgImage()" title="Remove background image">✕</button>
+      </div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Social Links
+        <button class="tb-btn" style="padding:1px 7px;font-size:11px;" onclick="openModal('social-modal')">＋</button>
+      </div>
+      <div id="social-list"></div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Bottom Links
+        <button class="tb-btn" style="padding:1px 7px;font-size:11px;" onclick="openModal('bottom-modal')">＋</button>
+      </div>
+      <div id="bottom-list"></div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Layer</div>
+      <div class="prow">
+        <button class="tb-btn" style="flex:1" onclick="canvas.bringToFront(canvas.getActiveObject());canvas.renderAll()">⬆ Front</button>
+        <button class="tb-btn" style="flex:1" onclick="canvas.sendToBack(canvas.getActiveObject());canvas.renderAll()">⬇ Back</button>
+      </div>
+      <div class="prow">
+        <button class="tb-btn" style="flex:1" onclick="canvas.bringForward(canvas.getActiveObject());canvas.renderAll()">▲</button>
+        <button class="tb-btn" style="flex:1" onclick="canvas.sendBackwards(canvas.getActiveObject());canvas.renderAll()">▼</button>
+      </div>
+    </div>
+
+    <div class="psec">
+      <div class="psec-title">Flip</div>
+      <div class="prow">
+        <button class="tb-btn" style="flex:1" onclick="flip('X')">↔ H</button>
+        <button class="tb-btn" style="flex:1" onclick="flip('Y')">↕ V</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <button class="panel-tab" id="left-tab" onclick="togglePanel('left')" title="Collapse/expand left panel">◀</button>
+
+  <div id="canvas-area">
+    <div id="layout-banner">📱 Editing Mobile Layout — drag links to set mobile positions</div>
+    <div id="canvas-wrap">
+      <img id="page-bg-img" alt="">
+      <canvas id="c"></canvas>
+    </div>
+  </div>
+
+  <button class="panel-tab" id="right-tab" onclick="togglePanel('right')" title="Collapse/expand right panel">▶</button>
+
+  <aside class="panel" id="right-panel">
+    <div class="psec" id="rp-empty">
+      <div class="psec-title">Properties</div>
+      <div style="font-size:11px;color:var(--text-dim)">Select an object to see its properties.</div>
+    </div>
+    <div class="psec" id="rp-obj" style="display:none">
+      <div class="psec-title">Position &amp; Size</div>
+      <div class="prow"><label>X</label><input class="pinput" id="pr-x" type="number" onchange="applyPos()"></div>
+      <div class="prow"><label>Y</label><input class="pinput" id="pr-y" type="number" onchange="applyPos()"></div>
+      <div class="prow"><label>W</label><input class="pinput" id="pr-w" type="number" onchange="applySize()"></div>
+      <div class="prow"><label>H</label><input class="pinput" id="pr-h" type="number" onchange="applySize()"></div>
+      <div class="prow"><label>Angle °</label><input class="pinput" id="pr-ang" type="number" onchange="applyAngle()"></div>
+      <div class="prow"><label>Opacity</label>
+        <input type="range" id="tb-opacity2" min="5" max="100" value="100" style="flex:1" oninput="applyOpacity2()">
+      </div>
+    </div>
+    <div class="psec" id="rp-text" style="display:none">
+      <div class="psec-title">Text</div>
+      <div class="prow"><label>Width</label><input class="pinput" id="pr-tbw" type="number" onchange="applyTbWidth()"></div>
+      <div class="prow"><label>Line H</label>
+        <input class="pinput" id="pr-lh" type="number" step="0.05" min="0.8" max="3" onchange="applyLineHeight()">
+      </div>
+      <div class="prow"><label>Spacing</label>
+        <input class="pinput" id="pr-cs" type="number" step="1" onchange="applyCharSpacing()">
+      </div>
+    </div>
+    <div class="psec" id="rp-shadow" style="display:none">
+      <div class="psec-title">Shadow / Glow</div>
+      <div class="prow"><label>Enable</label>
+        <input type="checkbox" id="pr-shadow-on" onchange="applyShadow()">
+      </div>
+      <div class="prow"><label>Color</label>
+        <input type="color" id="pr-shadow-color" value="#000000" onchange="applyShadow()"
+               style="width:36px;height:24px;border:none;cursor:pointer;">
+      </div>
+      <div class="prow"><label>Blur</label>
+        <input class="pinput" id="pr-shadow-blur" type="number" value="10" min="0" max="100" onchange="applyShadow()">
+      </div>
+      <div class="prow"><label>Offset X</label>
+        <input class="pinput" id="pr-shadow-ox" type="number" value="2" onchange="applyShadow()">
+      </div>
+      <div class="prow"><label>Offset Y</label>
+        <input class="pinput" id="pr-shadow-oy" type="number" value="2" onchange="applyShadow()">
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<div id="statusbar">Ready — 900 × 560 canvas</div>
+
+<input id="f-image"   type="file" accept="image/*" style="display:none" onchange="loadImage(event)">
+<input id="f-bgimg"   type="file" accept="image/*" style="display:none" onchange="loadBgImage(event)">
+<input id="f-project" type="file" accept=".json"   style="display:none" onchange="loadProject(event)">
+
+<div class="modal-overlay" id="social-modal">
+  <div class="modal-box">
+    <div class="modal-title">Add Social Link</div>
+    <div class="prow"><label>Platform</label>
+      <select class="pinput" id="sl-plat" onchange="onSocialPlatformChange()">
+        <option value="instagram">Instagram</option>
+        <option value="facebook">Facebook</option>
+        <option value="youtube">YouTube</option>
+        <option value="whatsapp">WhatsApp</option>
+        <option value="twitter">Twitter / X</option>
+        <option value="website">Website</option>
+      </select>
+    </div>
+    <div class="prow"><label>Label</label><input class="pinput" id="sl-label" placeholder="@handle or name"></div>
+    <div class="prow"><label>URL</label><input class="pinput" id="sl-url" placeholder="https://…"></div>
+    <div class="prow"><label>BG Color</label>
+      <input type="color" id="sl-bg-color" value="#E1306C"
+             style="width:36px;height:24px;border:none;cursor:pointer;">
+      <span style="font-size:11px;color:var(--text-dim);flex:1">(icon background)</span>
+    </div>
+    <div class="prow"><label>Icon Color</label>
+      <input type="color" id="sl-icon-color" value="#ffffff"
+             style="width:36px;height:24px;border:none;cursor:pointer;">
+    </div>
+    <div class="modal-btns">
+      <button class="tb-btn accent" onclick="addSocialLink()">Add</button>
+      <button class="tb-btn" onclick="closeModal('social-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bottom-modal">
+  <div class="modal-box">
+    <div class="modal-title">Add Link Button</div>
+    <div class="prow"><label>Label</label><input class="pinput" id="bl-label" placeholder="e.g. RSVP"></div>
+    <div class="prow"><label>URL</label><input class="pinput" id="bl-url" placeholder="https://…"></div>
+    <div class="prow"><label>BG Color</label>
+      <input type="color" id="bl-bg-color" value="#000000"
+             style="width:36px;height:24px;border:none;cursor:pointer;">
+    </div>
+    <div class="prow"><label>Text Color</label>
+      <input type="color" id="bl-text-color" value="#ffffff"
+             style="width:36px;height:24px;border:none;cursor:pointer;">
+    </div>
+    <div class="prow"><label>Font Size</label>
+      <input class="pinput" id="bl-font-size" type="number" value="14" min="8" max="72"
+             style="width:60px;flex:none;">
+      <span style="font-size:11px;color:var(--text-dim)">px</span>
+    </div>
+    <div class="prow"><label>Style</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;margin-right:10px">
+        <input type="checkbox" id="bl-bold"> <b>Bold</b>
+      </label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" id="bl-italic"> <i>Italic</i>
+      </label>
+    </div>
+    <div class="modal-btns">
+      <button class="tb-btn accent" onclick="addBottomLink()">Add</button>
+      <button class="tb-btn" onclick="closeModal('bottom-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="font-modal">
+  <div class="modal-box">
+    <div class="modal-title">Load Google Font</div>
+    <div class="prow"><label>Font name</label>
+      <input class="pinput" id="gf-name" placeholder="e.g. Lato, Roboto, Playfair Display"
+             onkeydown="if(event.key==='Enter')loadGoogleFont()">
+    </div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">
+      Enter exact name from <a href="https://fonts.google.com" target="_blank" rel="noopener"
+      style="color:var(--accent)">fonts.google.com</a> — it will be added to the Font dropdown.
+    </div>
+    <div id="gf-preview" style="font-size:18px;min-height:32px;padding:6px;
+         background:var(--btn-bg);border-radius:4px;margin-bottom:8px;color:var(--text)">
+      Preview text
+    </div>
+    <div class="modal-btns">
+      <button class="tb-btn" onclick="previewGoogleFont()">Preview</button>
+      <button class="tb-btn accent" onclick="loadGoogleFont()">Add Font</button>
+      <button class="tb-btn" onclick="closeModal('font-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Preview modal -->
+<div class="modal-overlay" id="preview-modal">
+  <div class="modal-box" style="max-width:96vw;max-height:92vh;display:flex;flex-direction:column;width:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="modal-title" style="margin:0;">Preview</div>
+        <button class="tb-btn active" id="prev-tab-desktop" onclick="switchPreviewTab('desktop')">◻ Desktop</button>
+        <button class="tb-btn"        id="prev-tab-mobile"  onclick="switchPreviewTab('mobile')">📱 Mobile</button>
+      </div>
+      <button class="tb-btn" onclick="closeModal('preview-modal')">✕ Close</button>
+    </div>
+    <div style="display:flex;justify-content:center;padding:8px 0;overflow:auto;">
+      <div class="prev-col">
+        <div class="prev-col-lbl" id="prev-frame-label">◻ Desktop (1280 × 720)</div>
+        <div id="prev-frame" class="prev-viewport desktop"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Constants ───────────────────────────────────────────────────── */
+const CW = 900, CH = 560, EXPORT_SCALE = 2;
+let scale = 1;
+let pageBgDataUrl = null, pageBgExt = 'jpg';
+let editLayout = 'desktop'; // 'desktop' | 'mobile'
+
+function setEditLayout(mode) {
+  editLayout = mode;
+  document.getElementById('btn-layout-desktop').classList.toggle('active', mode === 'desktop');
+  document.getElementById('btn-layout-mobile').classList.toggle('active', mode === 'mobile');
+  document.getElementById('layout-banner').style.display = mode === 'mobile' ? 'block' : 'none';
+  renderLinkWidgets();
+}
+
+const SOCIAL_COLORS = {
+  instagram: '#E1306C',
+  facebook:  '#1877F2',
+  youtube:   '#FF0000',
+  whatsapp:  '#25D366',
+  twitter:   '#000000',
+  website:   '#c9a84c',
+};
+
+const SOCIAL_SVG = {
+  instagram: `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.791-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>`,
+  facebook:  `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`,
+  youtube:   `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>`,
+  whatsapp:  `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>`,
+  twitter:   `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`,
+  website:   `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`,
+};
+
+/* ── Canvas ──────────────────────────────────────────────────────── */
+const canvas = new fabric.Canvas('c', {
+  width: CW, height: CH,
+  backgroundColor: null,
+  preserveObjectStacking: true,
+});
+
+/* ── Fit canvas to viewport ──────────────────────────────────────── */
+function fitCanvas() {
+  const ca = document.getElementById('canvas-area');
+  const avW = ca.clientWidth  - 16;
+  const avH = ca.clientHeight - 16;
+  scale = Math.min(avW / CW, avH / CH);
+  if (scale > 1) scale = 1;
+  document.getElementById('canvas-wrap').style.transform = `scale(${scale})`;
+}
+window.addEventListener('resize', fitCanvas);
+
+function togglePanel(side) {
+  const panel = document.getElementById(side + '-panel');
+  const tab   = document.getElementById(side + '-tab');
+  panel.classList.toggle('collapsed');
+  const collapsed = panel.classList.contains('collapsed');
+  tab.textContent = side === 'left'
+    ? (collapsed ? '▶' : '◀')
+    : (collapsed ? '◀' : '▶');
+}
+
+/* ── History ─────────────────────────────────────────────────────── */
+let _hist = [], _hi = -1, _paused = false;
+
+function pushHist() {
+  if (_paused) return;
+  const snap = JSON.stringify(canvas.toJSON());
+  _hist = _hist.slice(0, _hi + 1);
+  _hist.push(snap);
+  if (_hist.length > 60) _hist.shift(); else _hi++;
+}
+
+function undo() {
+  if (_hi <= 0) return;
+  _paused = true; _hi--;
+  canvas.loadFromJSON(_hist[_hi], () => { canvas.renderAll(); _paused = false; });
+}
+
+function redo() {
+  if (_hi >= _hist.length - 1) return;
+  _paused = true; _hi++;
+  canvas.loadFromJSON(_hist[_hi], () => { canvas.renderAll(); _paused = false; });
+}
+
+canvas.on('object:modified', pushHist);
+canvas.on('object:added',    pushHist);
+canvas.on('object:removed',  pushHist);
+pushHist();
+
+/* ── Page background ─────────────────────────────────────────────── */
+function applyPageBg() {
+  const color = document.getElementById('pg-bg').value;
+  const ca = document.getElementById('canvas-area');
+  ca.style.backgroundColor = color;
+  if (pageBgDataUrl) {
+    ca.style.backgroundImage    = `url('${pageBgDataUrl}')`;
+    ca.style.backgroundSize     = 'cover';
+    ca.style.backgroundPosition = 'center';
+    document.getElementById('canvas-wrap').style.backgroundColor = 'transparent';
+  } else {
+    ca.style.backgroundImage = '';
+    document.getElementById('canvas-wrap').style.backgroundColor = color;
+  }
+}
+
+function loadBgImage(e) {
+  const file = e.target.files[0]; if (!file) return;
+  pageBgExt = file.name.split('.').pop().toLowerCase() || 'jpg';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    pageBgDataUrl = ev.target.result;
+    const ca = document.getElementById('canvas-area');
+    ca.style.backgroundImage    = `url('${pageBgDataUrl}')`;
+    ca.style.backgroundSize     = 'cover';
+    ca.style.backgroundPosition = 'center';
+    document.getElementById('canvas-wrap').style.backgroundColor = 'transparent';
+    setStatus('Background image set — editor shows full image; export fills full screen');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function clearBgImage() {
+  pageBgDataUrl = null;
+  pageBgExt = 'jpg';
+  const color = document.getElementById('pg-bg').value;
+  const ca = document.getElementById('canvas-area');
+  ca.style.backgroundImage = '';
+  document.getElementById('canvas-wrap').style.backgroundColor = color;
+  setStatus('Background image cleared');
+}
+
+/* ── Add objects ─────────────────────────────────────────────────── */
+function addText() {
+  const t = new fabric.Textbox('New text', {
+    left: CW/2, top: CH/2, originX: 'center', originY: 'center',
+    fontFamily: document.getElementById('tb-font').value,
+    fontSize: +document.getElementById('tb-size').value || 32,
+    fill: document.getElementById('tb-color').value,
+    textAlign: 'center', width: 400,
+  });
+  canvas.add(t);
+  canvas.setActiveObject(t);
+  t.enterEditing();
+  canvas.renderAll();
+}
+
+function addImage() { document.getElementById('f-image').click(); }
+
+function loadImage(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    fabric.Image.fromURL(ev.target.result, img => {
+      const s = Math.min(1, (CW * 0.55) / img.width, (CH * 0.55) / img.height);
+      img.set({ left: CW/2, top: CH/2, originX: 'center', originY: 'center', scaleX: s, scaleY: s });
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      canvas.renderAll();
+    });
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function duplicateObj() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.clone(cl => {
+    cl.set({ left: o.left + 20, top: o.top + 20 });
+    canvas.add(cl); canvas.setActiveObject(cl); canvas.renderAll();
+  });
+}
+
+function deleteObj() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  if (o.type === 'activeSelection') o.getObjects().forEach(x => canvas.remove(x));
+  else canvas.remove(o);
+  canvas.discardActiveObject(); canvas.renderAll();
+}
+
+function flip(axis) {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set('flip' + axis, !o['flip' + axis]); canvas.renderAll();
+}
+
+/* ── Text styling ────────────────────────────────────────────────── */
+function getTextObj() {
+  const o = canvas.getActiveObject();
+  return (o && (o.type === 'textbox' || o.type === 'i-text' || o.type === 'text')) ? o : null;
+}
+
+function applyFont()     { const t = getTextObj(); if (t) { t.set('fontFamily', document.getElementById('tb-font').value); canvas.renderAll(); } }
+function applyFontSize() { const t = getTextObj(); if (t) { t.set('fontSize', +document.getElementById('tb-size').value || 32); canvas.renderAll(); } }
+function applyColor()    { const t = getTextObj(); if (t) { t.set('fill', document.getElementById('tb-color').value); canvas.renderAll(); } }
+function setAlign(a)     { const t = getTextObj(); if (t) { t.set('textAlign', a); canvas.renderAll(); } }
+
+function toggleBold() {
+  const t = getTextObj(); if (!t) return;
+  t.set('fontWeight', t.fontWeight === 'bold' ? 'normal' : 'bold');
+  document.getElementById('btn-bold').classList.toggle('active', t.fontWeight === 'bold');
+  canvas.renderAll();
+}
+
+function toggleItalic() {
+  const t = getTextObj(); if (!t) return;
+  t.set('fontStyle', t.fontStyle === 'italic' ? 'normal' : 'italic');
+  document.getElementById('btn-italic').classList.toggle('active', t.fontStyle === 'italic');
+  canvas.renderAll();
+}
+
+function applyOpacity() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set('opacity', +document.getElementById('tb-opacity').value / 100); canvas.renderAll();
+}
+function applyOpacity2() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  const v = +document.getElementById('tb-opacity2').value;
+  document.getElementById('tb-opacity').value = v;
+  o.set('opacity', v / 100); canvas.renderAll();
+}
+
+function applyLineHeight()  { const t = getTextObj(); if (t) { t.set('lineHeight', +document.getElementById('pr-lh').value); canvas.renderAll(); } }
+function applyCharSpacing() { const t = getTextObj(); if (t) { t.set('charSpacing', +document.getElementById('pr-cs').value); canvas.renderAll(); } }
+function applyTbWidth()     { const t = getTextObj(); if (t) { t.set('width', +document.getElementById('pr-tbw').value); canvas.renderAll(); } }
+
+/* ── Shadow ──────────────────────────────────────────────────────── */
+function applyShadow() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  const on    = document.getElementById('pr-shadow-on').checked;
+  const color = document.getElementById('pr-shadow-color').value;
+  const blur  = +document.getElementById('pr-shadow-blur').value;
+  const ox    = +document.getElementById('pr-shadow-ox').value;
+  const oy    = +document.getElementById('pr-shadow-oy').value;
+  o.set('shadow', on ? new fabric.Shadow({ color, blur, offsetX: ox, offsetY: oy }) : null);
+  canvas.renderAll();
+}
+
+/* ── Properties panel ────────────────────────────────────────────── */
+function syncProps(o) {
+  const rpe = document.getElementById('rp-empty');
+  const rpo = document.getElementById('rp-obj');
+  const rpt = document.getElementById('rp-text');
+  const rps = document.getElementById('rp-shadow');
+  if (!o) { rpe.style.display = ''; rpo.style.display = rpt.style.display = rps.style.display = 'none'; return; }
+  rpe.style.display = 'none'; rpo.style.display = '';
+  document.getElementById('pr-x').value   = Math.round(o.left);
+  document.getElementById('pr-y').value   = Math.round(o.top);
+  document.getElementById('pr-w').value   = Math.round(o.getScaledWidth());
+  document.getElementById('pr-h').value   = Math.round(o.getScaledHeight());
+  document.getElementById('pr-ang').value = Math.round(o.angle || 0);
+  const op = Math.round((o.opacity ?? 1) * 100);
+  document.getElementById('tb-opacity').value  = op;
+  document.getElementById('tb-opacity2').value = op;
+
+  const isText = o.type === 'textbox' || o.type === 'i-text' || o.type === 'text';
+  rpt.style.display = isText ? '' : 'none';
+  rps.style.display = '';
+  if (isText) {
+    document.getElementById('tb-font').value  = o.fontFamily || 'Arial';
+    document.getElementById('tb-size').value  = o.fontSize   || 32;
+    document.getElementById('tb-color').value = o.fill       || '#ffffff';
+    document.getElementById('btn-bold').classList.toggle('active',   o.fontWeight === 'bold');
+    document.getElementById('btn-italic').classList.toggle('active', o.fontStyle  === 'italic');
+    document.getElementById('pr-tbw').value = Math.round(o.width);
+    document.getElementById('pr-lh').value  = (o.lineHeight || 1.16).toFixed(2);
+    document.getElementById('pr-cs').value  = Math.round(o.charSpacing || 0);
+  }
+  const sh = o.shadow;
+  document.getElementById('pr-shadow-on').checked        = !!sh;
+  document.getElementById('pr-shadow-color').value       = sh ? (sh.color || '#000000') : '#000000';
+  document.getElementById('pr-shadow-blur').value        = sh ? (sh.blur  || 0) : 10;
+  document.getElementById('pr-shadow-ox').value          = sh ? (sh.offsetX || 0) : 2;
+  document.getElementById('pr-shadow-oy').value          = sh ? (sh.offsetY || 0) : 2;
+}
+
+function applyPos() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set({ left: +document.getElementById('pr-x').value, top: +document.getElementById('pr-y').value });
+  o.setCoords(); canvas.renderAll();
+}
+
+function applySize() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  const w = +document.getElementById('pr-w').value, h = +document.getElementById('pr-h').value;
+  o.set({ scaleX: w / (o.width || 1), scaleY: h / (o.height || 1) });
+  o.setCoords(); canvas.renderAll();
+}
+
+function applyAngle() {
+  const o = canvas.getActiveObject(); if (!o) return;
+  o.set('angle', +document.getElementById('pr-ang').value);
+  o.setCoords(); canvas.renderAll();
+}
+
+canvas.on('selection:created', e => syncProps(e.selected?.[0]));
+canvas.on('selection:updated', e => syncProps(e.selected?.[0]));
+canvas.on('selection:cleared', () => syncProps(null));
+canvas.on('object:modified',   e => syncProps(e.target));
+
+/* ── Link data & panel rendering ─────────────────────────────────── */
+let socialLinks = [], bottomLinks = [];
+
+function renderSocialList() {
+  const el = document.getElementById('social-list');
+  el.innerHTML = '';
+  socialLinks.forEach((l, i) => {
+    const d = document.createElement('div');
+    d.className = 'link-item';
+    d.innerHTML = `<span style="color:${SOCIAL_COLORS[l.platform]||'#888'}">${l.platform}</span>
+      <span class="link-lbl">${esc(l.label)}</span>
+      <button class="ico-btn" onclick="removeSocialLink(${i})">✕</button>`;
+    el.appendChild(d);
+  });
+  renderLinkWidgets();
+}
+
+function renderBottomList() {
+  const el = document.getElementById('bottom-list');
+  el.innerHTML = '';
+  bottomLinks.forEach((l, i) => {
+    const d = document.createElement('div');
+    d.className = 'link-item';
+    d.innerHTML = `<span class="link-lbl">${esc(l.label)}</span>
+      <button class="ico-btn" onclick="removeBottomLink(${i})">✕</button>`;
+    el.appendChild(d);
+  });
+  renderLinkWidgets();
+}
+
+function removeSocialLink(i) { socialLinks.splice(i, 1); renderSocialList(); }
+function removeBottomLink(i) { bottomLinks.splice(i, 1); renderBottomList(); }
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  if (id === 'social-modal') onSocialPlatformChange();
+  if (id === 'font-modal') {
+    document.getElementById('gf-name').value = '';
+    document.getElementById('gf-preview').style.fontFamily = '';
+    document.getElementById('gf-preview').textContent = 'Preview text';
+  }
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function onSocialPlatformChange() {
+  const plat = document.getElementById('sl-plat').value;
+  document.getElementById('sl-bg-color').value = SOCIAL_COLORS[plat] || '#888888';
+}
+
+function addSocialLink() {
+  const url = document.getElementById('sl-url').value.trim(); if (!url) return;
+  const offset = socialLinks.length * 50;
+  socialLinks.push({
+    platform:  document.getElementById('sl-plat').value,
+    label:     document.getElementById('sl-label').value.trim() || document.getElementById('sl-plat').value,
+    url,
+    bgColor:   document.getElementById('sl-bg-color').value,
+    iconColor: document.getElementById('sl-icon-color').value,
+    pos:       { x: 20, y: 20 + offset },
+    mobilePos: { x: 20, y: 20 + offset },
+  });
+  document.getElementById('sl-label').value = '';
+  document.getElementById('sl-url').value   = '';
+  renderSocialList();
+  closeModal('social-modal');
+}
+
+function addBottomLink() {
+  const label = document.getElementById('bl-label').value.trim();
+  const url   = document.getElementById('bl-url').value.trim();
+  if (!label || !url) return;
+  const offset = bottomLinks.length * 40;
+  bottomLinks.push({
+    label, url,
+    bgColor:   document.getElementById('bl-bg-color').value,
+    textColor: document.getElementById('bl-text-color').value,
+    fontSize:  +document.getElementById('bl-font-size').value || 14,
+    bold:      document.getElementById('bl-bold').checked,
+    italic:    document.getElementById('bl-italic').checked,
+    pos:       { x: 20, y: 400 + offset },
+    mobilePos: { x: 20, y: 400 + offset },
+  });
+  document.getElementById('bl-label').value = '';
+  document.getElementById('bl-url').value   = '';
+  document.getElementById('bl-bold').checked   = false;
+  document.getElementById('bl-italic').checked = false;
+  renderBottomList();
+  closeModal('bottom-modal');
+}
+
+/* ── Link widgets ────────────────────────────────────────────────── */
+function renderLinkWidgets() {
+  document.querySelectorAll('#canvas-wrap .link-widget').forEach(el => el.remove());
+  const wrap = document.getElementById('canvas-wrap');
+
+  socialLinks.forEach((l, i) => {
+    const p = editLayout === 'mobile' ? (l.mobilePos || l.pos) : l.pos;
+    const div = makeWidget('social', i, p.x, p.y);
+    const a = document.createElement('a');
+    a.href = l.url; a.target = '_blank'; a.rel = 'noopener';
+    a.className = 'lnk-icon';
+    a.style.background = l.bgColor   || SOCIAL_COLORS[l.platform] || '#888';
+    a.style.color      = l.iconColor || '#ffffff';
+    a.title = l.label;
+    a.innerHTML = SOCIAL_SVG[l.platform] || '🔗';
+    div.appendChild(a);
+    wrap.appendChild(div);
+  });
+
+  bottomLinks.forEach((l, i) => {
+    const p = editLayout === 'mobile' ? (l.mobilePos || l.pos) : l.pos;
+    const div = makeWidget('bottom', i, p.x, p.y);
+    const a = document.createElement('a');
+    a.href = l.url; a.target = '_blank'; a.rel = 'noopener';
+    a.className = 'lnk-btn';
+    a.style.background  = l.bgColor   || '#000000';
+    a.style.color       = l.textColor || '#ffffff';
+    a.style.fontSize    = (l.fontSize || 14) + 'px';
+    a.style.fontWeight  = l.bold   ? 'bold'   : 'normal';
+    a.style.fontStyle   = l.italic ? 'italic' : 'normal';
+    a.textContent = l.label;
+    div.appendChild(a);
+    wrap.appendChild(div);
+  });
+}
+
+/* HANDLE_TOTAL: handle height (16px) + flex gap (2px) = 18px in canvas-coordinate space.
+   pos.x/pos.y always refers to the icon/button top-left, not the widget top-left. */
+const HANDLE_TOTAL = 18;
+
+function makeWidget(type, idx, x, y) {
+  const div = document.createElement('div');
+  div.className = 'link-widget';
+  div.dataset.type = type;
+  div.dataset.idx  = idx;
+  div.style.left = x + 'px';
+  div.style.top  = (y - HANDLE_TOTAL) + 'px'; // handle sits above pos.y; icon lands at pos.y
+  const handle = document.createElement('div');
+  handle.className = 'widget-handle';
+  handle.textContent = '⠿';
+  handle.title = 'Drag to reposition';
+  div.appendChild(handle);
+  return div;
+}
+
+/* ── Link drag (body-detach, handle only) ────────────────────────── */
+(function initLinksDrag() {
+  let drag = null;
+
+  document.getElementById('canvas-wrap').addEventListener('mousedown', e => {
+    const handle = e.target.closest('.widget-handle');
+    if (!handle) return;
+    const widget = handle.closest('.link-widget');
+    const arr = widget.dataset.type === 'social' ? socialLinks : bottomLinks;
+    const idx = +widget.dataset.idx;
+    const rect = widget.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+
+    widget.style.position = 'fixed';
+    widget.style.left = rect.left + 'px';
+    widget.style.top  = rect.top  + 'px';
+    document.body.appendChild(widget);
+    handle.classList.add('dragging');
+    drag = { widget, handle, arr, idx, offX, offY };
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    drag.widget.style.left = (e.clientX - drag.offX) + 'px';
+    drag.widget.style.top  = (e.clientY - drag.offY) + 'px';
+  });
+
+  document.addEventListener('mouseup', e => {
+    if (!drag) return;
+    drag.handle.classList.remove('dragging');
+    const wrap = document.getElementById('canvas-wrap');
+    const cwR  = wrap.getBoundingClientRect();
+    // widget_top is where the widget's top (handle) landed in canvas coords
+    const widget_top_canvas = (e.clientY - drag.offY - cwR.top) / scale;
+    const nx = (e.clientX - drag.offX - cwR.left) / scale;
+    const ny = widget_top_canvas + HANDLE_TOTAL; // icon top = widget top + handle + gap
+    if (editLayout === 'mobile') {
+      drag.arr[drag.idx].mobilePos = { x: nx, y: ny };
+    } else {
+      drag.arr[drag.idx].pos = { x: nx, y: ny };
+    }
+    drag.widget.style.position = 'absolute';
+    drag.widget.style.left = nx + 'px';
+    drag.widget.style.top  = (ny - HANDLE_TOTAL) + 'px'; // widget positioned so icon is at ny
+    wrap.appendChild(drag.widget);
+    drag = null;
+  });
+})();
+
+/* ── Save / Load project ─────────────────────────────────────────── */
+function saveProject() {
+  const data = {
+    canvas:        canvas.toJSON(),
+    pageBg:        document.getElementById('pg-bg').value,
+    pageTitle:     document.getElementById('pg-title').value,
+    pageBgDataUrl,
+    pageBgExt,
+    socialLinks,
+    bottomLinks,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  dlBlob(blob, 'invitation.json');
+}
+
+function loadProject(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      document.getElementById('pg-bg').value    = d.pageBg    || '#1a0a2e';
+      document.getElementById('pg-title').value = d.pageTitle || '';
+      pageBgDataUrl = d.pageBgDataUrl || null;
+      pageBgExt     = d.pageBgExt    || 'jpg';
+      applyPageBg();
+      socialLinks = (d.socialLinks || []).map(l => ({ ...l, pos: l.pos || { x: 20, y: 20 }, mobilePos: l.mobilePos || l.pos || { x: 20, y: 20 } }));
+      bottomLinks = (d.bottomLinks || []).map(l => ({ ...l, pos: l.pos || { x: 20, y: 400 }, mobilePos: l.mobilePos || l.pos || { x: 20, y: 400 } }));
+      renderSocialList();
+      renderBottomList();
+      _paused = true;
+      canvas.loadFromJSON(d.canvas, () => { canvas.renderAll(); _paused = false; pushHist(); });
+    } catch { alert('Invalid project file.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ── Preview ─────────────────────────────────────────────────────── */
+function openPreview() {
+  document.getElementById('preview-modal').classList.add('open');
+  switchPreviewTab(editLayout);
+}
+
+function switchPreviewTab(tab) {
+  document.getElementById('prev-tab-desktop').classList.toggle('active', tab === 'desktop');
+  document.getElementById('prev-tab-mobile').classList.toggle('active', tab === 'mobile');
+
+  const frame = document.getElementById('prev-frame');
+  const label = document.getElementById('prev-frame-label');
+  if (tab === 'desktop') {
+    frame.className = 'prev-viewport desktop';
+    label.textContent = '◻ Desktop (1280 × 720)';
+    renderPreviewDevice('prev-frame', canvas.toDataURL({ format: 'png', multiplier: 1 }), 1280, 720, 'desktop');
+  } else {
+    frame.className = 'prev-viewport mobile';
+    label.textContent = '📱 Mobile (390 × 844)';
+    renderPreviewDevice('prev-frame', canvas.toDataURL({ format: 'png', multiplier: 1 }), 390, 844, 'mobile');
+  }
+}
+
+function renderPreviewDevice(containerId, canvasDataUrl, vpW, vpH, layout) {
+  const container = document.getElementById(containerId);
+  // Scale the simulated viewport to a comfortable display size (max 660px wide or 580px tall)
+  const PREV_SCALE = Math.min(660 / vpW, 580 / vpH, 1);
+  const dispW = Math.round(vpW * PREV_SCALE);
+  const dispH = Math.round(vpH * PREV_SCALE);
+  container.style.width  = dispW + 'px';
+  container.style.height = dispH + 'px';
+
+  // Scale factor: how the 900×560 canvas fits inside vpW×vpH
+  const s = Math.min(vpW / CW, vpH / CH);
+  const pageW = Math.round(CW * s);
+  const pageH = Math.round(CH * s);
+
+  // Position page centred within viewport
+  const pageLeft = Math.round((vpW - pageW) / 2);
+  const pageTop  = Math.round((vpH - pageH) / 2);
+
+  const links = [
+    ...socialLinks.map(l => ({ ...l, _type: 'social' })),
+    ...bottomLinks.map(l => ({ ...l, _type: 'bottom' })),
+  ];
+
+  const linkHTML = links.map(l => {
+    const p = layout === 'mobile' ? (l.mobilePos || l.pos) : l.pos;
+    if (l._type === 'social') {
+      const bg  = l.bgColor   || SOCIAL_COLORS[l.platform] || '#888';
+      const col = l.iconColor || '#ffffff';
+      const svg = SOCIAL_SVG[l.platform] || '';
+      return `<div style="position:absolute;left:${p.x}px;top:${p.y}px;
+        width:40px;height:40px;border-radius:50%;
+        background:${bg};color:${col};display:flex;align-items:center;justify-content:center;
+        box-shadow:0 2px 6px rgba(0,0,0,.5);font-size:18px;">${svg}</div>`;
+    } else {
+      const bg  = l.bgColor   || '#000000';
+      const col = l.textColor || '#ffffff';
+      const fw  = l.bold   ? 'bold'   : 'normal';
+      const fi  = l.italic ? 'italic' : 'normal';
+      const fs  = l.fontSize || 14;
+      return `<div style="position:absolute;left:${p.x}px;top:${p.y}px;
+        padding:7px 14px;border-radius:20px;white-space:nowrap;
+        background:${bg};color:${col};font-size:${fs}px;font-weight:${fw};font-style:${fi};
+        box-shadow:0 2px 6px rgba(0,0,0,.5);">${esc(l.label)}</div>`;
+    }
+  }).join('');
+
+  const pageBgColor = document.getElementById('pg-bg').value || '#1a0a2e';
+  const bgStyle = pageBgDataUrl
+    ? `background:${pageBgColor};background-image:url('${pageBgDataUrl}');background-size:cover;background-position:center;`
+    : `background:${pageBgColor};`;
+
+  container.innerHTML = `
+    <div style="position:absolute;inset:0;${bgStyle}overflow:hidden;">
+      ${canvasDataUrl ? `<img src="${canvasDataUrl}" style="
+        position:absolute;
+        left:${pageLeft}px;top:${pageTop}px;
+        width:${pageW}px;height:${pageH}px;">` : ''}
+      <div style="position:absolute;left:${pageLeft}px;top:${pageTop}px;
+        width:${CW}px;height:${CH}px;
+        transform:scale(${s});transform-origin:top left;pointer-events:none;">
+        ${linkHTML}
+      </div>
+    </div>`;
+
+  // Apply display scale
+  container.firstElementChild.style.transform = `scale(${PREV_SCALE})`;
+  container.firstElementChild.style.transformOrigin = 'top left';
+  container.firstElementChild.style.width  = vpW + 'px';
+  container.firstElementChild.style.height = vpH + 'px';
+}
+
+/* ── Export ZIP ──────────────────────────────────────────────────── */
+async function exportZip() {
+  setStatus('Rendering…');
+
+  const invB64 = canvas.toDataURL({ format: 'png', multiplier: EXPORT_SCALE }).split(',')[1];
+  const pageTitle = document.getElementById('pg-title').value || 'Invitation';
+  const pageBg    = document.getElementById('pg-bg').value;
+  const hasBg     = !!pageBgDataUrl;
+
+  // Links carry both desktop and mobile positions; runtime JS switches based on viewport
+  const socialLinkHTML = socialLinks.map(l => {
+    const bg  = l.bgColor   || SOCIAL_COLORS[l.platform] || '#888';
+    const col = l.iconColor || '#ffffff';
+    const svg = SOCIAL_SVG[l.platform] || '';
+    const mp  = l.mobilePos || l.pos;
+    return `<a class="lnk-icon" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="${esc(l.label)}"
+       data-dx="${Math.round(l.pos.x)}" data-dy="${Math.round(l.pos.y)}"
+       data-mx="${Math.round(mp.x)}" data-my="${Math.round(mp.y)}"
+       style="left:${Math.round(l.pos.x)}px;top:${Math.round(l.pos.y)}px;background:${bg};color:${col}">${svg}</a>`;
+  }).join('\n      ');
+
+  const bottomLinkHTML = bottomLinks.map(l => {
+    const bg  = l.bgColor   || '#000000';
+    const col = l.textColor || '#ffffff';
+    const fs  = l.fontSize  || 13;
+    const fw  = l.bold   ? 'font-weight:bold;'   : '';
+    const fi  = l.italic ? 'font-style:italic;'  : '';
+    const mp  = l.mobilePos || l.pos;
+    return `<a class="lnk-btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
+       data-dx="${Math.round(l.pos.x)}" data-dy="${Math.round(l.pos.y)}"
+       data-mx="${Math.round(mp.x)}" data-my="${Math.round(mp.y)}"
+       style="left:${Math.round(l.pos.x)}px;top:${Math.round(l.pos.y)}px;background:${bg};color:${col};font-size:${fs}px;${fw}${fi}">${esc(l.label)}</a>`;
+  }).join('\n      ');
+
+  // Background goes on body as CSS so it covers the full viewport, not just the page container
+  const bodyBgExtra = hasBg
+    ? `background-image:url('images/bg.${pageBgExt}');background-size:cover;background-position:center;`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+  <title>${esc(pageTitle)}</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;overflow:hidden;}
+    body{
+      background:${pageBg};${bodyBgExtra}
+      display:flex;align-items:center;justify-content:center;
+    }
+    /* #page sized by JS to maintain 900:560 ratio, avoiding the iOS 100vh browser-chrome bug */
+    #page{position:relative;overflow:hidden;flex-shrink:0;}
+    #page-inv{display:block;width:100%;height:100%;}
+    /* links-layer is always 900×560 canvas space; JS scales it to match #page */
+    #links-layer{
+      position:absolute;top:0;left:0;width:900px;height:560px;
+      transform-origin:top left;
+    }
+    .lnk-icon{
+      position:absolute;display:flex;align-items:center;justify-content:center;
+      width:40px;height:40px;border-radius:50%;
+      text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.6);
+    }
+    .lnk-btn{
+      position:absolute;display:inline-flex;align-items:center;
+      padding:7px 14px;border-radius:20px;
+      text-decoration:none;white-space:nowrap;
+      box-shadow:0 2px 8px rgba(0,0,0,.6);
+    }
+  </style>
+</head>
+<body>
+  <div id="page">
+    <img id="page-inv" src="images/invitation.png" alt="${esc(pageTitle)}">
+    <div id="links-layer">
+      ${socialLinkHTML}
+      ${bottomLinkHTML}
+    </div>
+  </div>
+  <script>
+    var _lastMobile = null;
+    function layout() {
+      var vw = document.documentElement.clientWidth;
+      var vh = document.documentElement.clientHeight;
+      var s  = Math.min(vw / 900, vh / 560);
+      var page = document.getElementById('page');
+      page.style.width  = Math.round(900 * s) + 'px';
+      page.style.height = Math.round(560 * s) + 'px';
+      document.getElementById('links-layer').style.transform = 'scale(' + s + ')';
+      // Switch link positions when mobile/desktop changes
+      var isMobile = vw < 768 || vh > vw;
+      if (isMobile !== _lastMobile) {
+        _lastMobile = isMobile;
+        document.querySelectorAll('#links-layer [data-dx]').forEach(function(el) {
+          if (isMobile) {
+            el.style.left = el.dataset.mx + 'px';
+            el.style.top  = el.dataset.my + 'px';
+          } else {
+            el.style.left = el.dataset.dx + 'px';
+            el.style.top  = el.dataset.dy + 'px';
+          }
+        });
+      }
+    }
+    layout();
+    window.addEventListener('resize', layout);
+  <\/script>
+</body>
+</html>`;
+
+  const zip = new JSZip();
+  zip.file('index.html', html);
+  const imagesFolder = zip.folder('images');
+  imagesFolder.file('invitation.png', invB64, { base64: true });
+  if (hasBg) {
+    const bgB64 = pageBgDataUrl.split(',')[1];
+    imagesFolder.file(`bg.${pageBgExt}`, bgB64, { base64: true });
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  dlBlob(blob, 'invitation-site.zip');
+  setStatus('ZIP exported — extract and open index.html');
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────── */
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function dlBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function setStatus(msg) { document.getElementById('statusbar').textContent = msg; }
+
+/* ── Keyboard shortcuts ──────────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  const inField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { if (!inField) { e.preventDefault(); undo(); } }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { if (!inField) { e.preventDefault(); redo(); } }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !inField) { e.preventDefault(); deleteObj(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveProject(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); duplicateObj(); }
+});
+
+/* ── Google Font loader ──────────────────────────────────────────── */
+const _loadedFonts = new Set();
+
+function _injectGoogleFont(name) {
+  if (_loadedFonts.has(name)) return;
+  _loadedFonts.add(name);
+  const link = document.createElement('link');
+  link.rel  = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name.replace(/\s+/g, '+'))}&display=swap`;
+  document.head.appendChild(link);
+}
+
+function previewGoogleFont() {
+  const name = document.getElementById('gf-name').value.trim();
+  if (!name) return;
+  _injectGoogleFont(name);
+  const prev = document.getElementById('gf-preview');
+  prev.style.fontFamily = `'${name}', serif`;
+  prev.textContent = name + ' — AaBbCcDd 1234';
+}
+
+function loadGoogleFont() {
+  const name = document.getElementById('gf-name').value.trim();
+  if (!name) return;
+  _injectGoogleFont(name);
+  const sel = document.getElementById('tb-font');
+  if (![...sel.options].some(o => o.value === name)) {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    sel.appendChild(opt);
+  }
+  sel.value = name;
+  closeModal('font-modal');
+  setStatus(`Font "${name}" loaded — select text and apply`);
+}
+
+/* ── Init ────────────────────────────────────────────────────────── */
+applyPageBg();
+fitCanvas();
+</script>
+
+</body>
+</html>

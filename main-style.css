@@ -1,4 +1,4 @@
-﻿/* ==============================
+/* ==============================
    Main Page Settings
    ============================== */
 
@@ -21,7 +21,7 @@ body {
   position: relative;        /* anchors all absolute children */
   width: 100%;
   /* max() ensures page is always tall enough to show the full portrait background
-     image (2256Ã—3360px). 149vw = (3360/2256)Ã—100vw â€” the scaled image height
+     image (2256×3360px). 149vw = (3360/2256)×100vw — the scaled image height
      when cover fills the viewport width. Falls back to 100vh on portrait screens
      where the image already fits vertically. */
   min-height: max(100vh, 149vw);
@@ -38,19 +38,18 @@ body {
 /* ==============================
    Button group and Instagram icon
    Both are independently absolutely positioned inside .phone-page.
-   No shared flex wrapper â€” eliminates any wrapping between them.
+   No shared flex wrapper — eliminates any wrapping between them.
    Instagram sits at top-right; button-group sits to its left.
    44px = 32px icon + 12px gap.
    ============================== */
 
 .button-group {
   position: absolute;
-  top: 2%;
-  right: calc(4% + 44px);
+  top: 40%;
+  left: 5%;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 12px;
-  align-items: center;
 }
 
 .instagram-link {
@@ -134,46 +133,46 @@ body {
 
 
 /* ==============================
-   Small phones (portrait â‰¤ 480px)
+   Small phones (portrait ≤ 480px)
    Compact buttons so the top bar fits the narrow viewport.
    ============================== */
 
 @media (max-width: 480px) {
   .button-group {
-    gap: 8px;
+    gap: 10px;
   }
 
   .event-button {
     min-width: 100px;
-    font-size: 11px;
+    font-size: 9px;
     padding: 8px 12px;
   }
 }
 
 
 /* ==============================
-   Phone landscape only (â‰¤ 500px tall)
+   Phone landscape only (≤ 500px tall)
    Slightly smaller buttons; layout stays the same.
    ============================== */
 
 @media screen and (orientation: landscape) and (max-height: 500px) {
   .button-group {
-    gap: 8px;
+    gap: 16px;
   }
 
   .event-button {
     min-width: 110px;
-    font-size: 12px;
+    font-size: 16px;
     padding: 8px 14px;
   }
 }
 
 
 /* ==============================
-   PC / large tablet (â‰¥ 769px wide)
+   PC / large tablet (≥ 769px wide)
    Center a 728px column on the dark background,
    matching the brochure.html layout width.
-   1085px = ceil(728 Ã— 3360/2256) â€” full portrait image height
+   1085px = ceil(728 × 3360/2256) — full portrait image height
    at 728px container width under background-size:cover.
    100vh wins on tall monitors; 1085px floor lets short
    viewports scroll to see the full image.
@@ -184,5 +183,15 @@ body {
     max-width: 728px;
     margin: 0 auto;
     min-height: max(100vh, 1085px);
+  }
+  
+  .button-group {
+    gap: 18px;
+  }
+
+  .event-button {
+    min-width: 110px;
+    font-size: 18px;
+    padding: 8px 14px;
   }
 }

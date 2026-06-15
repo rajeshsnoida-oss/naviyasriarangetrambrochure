@@ -5,6 +5,7 @@ const CANVAS_JSON_PROPS = [
   'name','fontFamily','fontWeight','fontStyle','underline','fill',
   'textAlign','fontSize','textBackgroundColor','lineHeight','charSpacing',
   'stroke','strokeWidth','opacity','angle','_shadowPreset','_shadowColor','_grayscale',
+  '_isGlow','_isGlitter',
 ];
 const ZOOM_STEP  = 0.1;
 const ZOOM_MIN   = 0.2;
@@ -270,6 +271,9 @@ let clipboard   = null;   // stores cloned Fabric objects for copy/paste
 let pasteOffset = 0;      // cumulative paste offset so repeated pastes don't stack exactly
 let _sectionGen     = 0;     // incremented on every switchSection to discard stale async callbacks
 let _sectionLoading = 0;     // >0 while enlivenObjects calls are in-flight; blocks snapshotCurrentSection
+let _suppressHistoryPush = false; // true while applyGlow/applyGlitter are mutating canvas objects
+let _glowDrag  = null; // { glowId } while user is dragging a glow handle
+let _cropState = null; // { obj, scale, imgW, imgH, dispW, dispH, cropX, cropY, cropW, cropH }
 
 /* ── Text style presets ─────────────────────────────────────────────────── */
 const DEFAULT_TEXT_STYLES = [
@@ -353,15 +357,91 @@ function initCanvas() {
     preserveObjectStacking: true,
     selection: true,
   });
+  canvas.on('after:render',        drawSafeMarginGuide);
   canvas.on('selection:created',  updateToolbar);
   canvas.on('selection:updated',  updateToolbar);
   canvas.on('selection:cleared',  updateToolbar);
   canvas.on('object:modified', e => {
     const obj = e.target;
+    if (obj && obj._isGlow) return; // glow objects are managed separately
     if (obj) snapObjToPixel(obj);
     normaliseTextScale(obj);
     onCanvasChange();
   });
+
+  // ── Glow drag — custom hit test so z-order doesn't matter ──────────────
+  // Handles are non-evented visual markers; drag is detected here via proximity.
+  const GLOW_HIT_R = 20; // px — click radius that activates glow drag
+  canvas.on('mouse:down', e => {
+    if (activeSec < 0) return;
+    const sec = sections[activeSec];
+    const glows = sec.bgGlows || [];
+    if (!glows.length) return;
+    const ptr = canvas.getPointer(e.e);
+    const cw = CANVAS_W, ch = sec.height || 700;
+    for (const glow of glows) {
+      const cx = cw * (glow.x !== undefined ? glow.x : 0.5);
+      const cy = ch * (glow.y !== undefined ? glow.y : 0.5);
+      if (Math.hypot(ptr.x - cx, ptr.y - cy) <= GLOW_HIT_R) {
+        _glowDrag = { glowId: glow.id };
+        // Cancel Fabric's drag/selection state so the nearby user object isn't moved.
+        canvas._currentTransform = null;  // abort any object-move Fabric already queued
+        canvas._groupSelector = null;     // abort any selection-rect Fabric queued
+        canvas.selection = false;
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        break;
+      }
+    }
+  });
+  canvas.on('mouse:move', e => {
+    // Hover cursor — show 'move' when near a glow handle (no drag in progress).
+    if (!_glowDrag && activeSec >= 0) {
+      const sec = sections[activeSec];
+      const glows = sec.bgGlows || [];
+      const ptr = canvas.getPointer(e.e);
+      const cw = CANVAS_W, ch = sec.height || 700;
+      const nearGlow = glows.some(g => {
+        const cx = cw * (g.x !== undefined ? g.x : 0.5);
+        const cy = ch * (g.y !== undefined ? g.y : 0.5);
+        return Math.hypot(ptr.x - cx, ptr.y - cy) <= GLOW_HIT_R;
+      });
+      canvas.defaultCursor = nearGlow ? 'move' : 'default';
+    }
+    if (!_glowDrag || activeSec < 0) return;
+    // Clear any selection rect that snuck through before the flag was set.
+    if (canvas._groupSelector) { canvas._groupSelector = null; canvas.requestRenderAll(); }
+    const sec = sections[activeSec];
+    const glow = (sec.bgGlows || []).find(g => g.id === _glowDrag.glowId);
+    if (!glow) return;
+    const ptr = canvas.getPointer(e.e);
+    const cw = CANVAS_W, ch = sec.height || 700;
+    glow.x = Math.max(0, Math.min(1, ptr.x / cw));
+    glow.y = Math.max(0, Math.min(1, ptr.y / ch));
+    // Replace this glow's visual and handle position in place (no full rebuild).
+    _suppressHistoryPush = true;
+    const visObj = canvas.getObjects().find(o => o._isGlowVisual && o._glowId === glow.id);
+    if (visObj) {
+      const idx = canvas.getObjects().indexOf(visObj);
+      canvas.remove(visObj);
+      const newVis = _renderGlowImage(glow, cw, ch);
+      canvas.insertAt(newVis, idx);
+    }
+    const hdl = canvas.getObjects().find(o => o._isGlowHandle && o._glowId === glow.id);
+    if (hdl) { hdl.set({ left: ptr.x, top: ptr.y }); hdl.setCoords(); }
+    _suppressHistoryPush = false;
+    applyGlitter(sec);
+    canvas.requestRenderAll();
+    markDirty();
+  });
+  canvas.on('mouse:up', () => {
+    if (!_glowDrag) return;
+    _glowDrag = null;
+    canvas.selection = true;
+    canvas.defaultCursor = 'default';
+    if (activeSec >= 0) applyGlow(sections[activeSec]); // full rebuild for clean state
+  });
+
   canvas.on('object:added',       onCanvasChange);
   canvas.on('object:removed',     onCanvasChange);
 }
@@ -439,6 +519,8 @@ function bgSettingsFrom(src) {
     bgGrad1: src.bgGrad1, bgGrad2: src.bgGrad2, bgGradDir: src.bgGradDir,
     bgTexture: src.bgTexture, bgTexFg: src.bgTexFg, bgTexBg: src.bgTexBg,
     bgImage: src.bgImage || null, bgSize: src.bgSize || 'cover',
+    bgGlows:   src.bgGlows ? src.bgGlows.map(g => ({ ...g })) : [],
+    glitter:   src.glitter   ? { ...src.glitter   } : null,
   };
 }
 
@@ -503,6 +585,153 @@ function applyCanvasBg(sec) {
     });
   } else {
     canvas.setBackgroundColor(sec.bg || '#ffffff', canvas.renderAll.bind(canvas));
+  }
+}
+
+/* ── Golden glow overlay ────────────────────────────────────────────────── */
+// Renders each glow in sec.bgGlows as a radial-gradient fabric.Image (visual)
+// plus a small draggable fabric.Circle handle (main canvas only, not during export).
+// All glow objects are tagged _isGlow:true and filtered from sec.objects snapshots.
+
+function _renderGlowImage(glow, cw, ch) {
+  const cx = cw * (glow.x !== undefined ? glow.x : 0.5);
+  const cy = ch * (glow.y !== undefined ? glow.y : 0.5);
+  const r  = Math.sqrt(cw * cw + ch * ch) * Math.max(0.1, glow.area || 0.5);
+  const alpha = Math.min(1, Math.max(0, glow.intensity || 0.6));
+  const el  = document.createElement('canvas');
+  el.width  = cw; el.height = ch;
+  const ctx = el.getContext('2d');
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0,   `rgba(255,200,50,${alpha})`);
+  grad.addColorStop(0.5, `rgba(255,180,30,${(alpha * 0.4).toFixed(3)})`);
+  grad.addColorStop(1,   'rgba(255,160,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, cw, ch);
+  return new fabric.Image(el, {
+    left: 0, top: 0, originX: 'left', originY: 'top',
+    width: cw, height: ch, scaleX: 1, scaleY: 1,
+    selectable: false, evented: false, hoverCursor: 'default',
+    _isGlow: true, _glowId: glow.id, _isGlowVisual: true,
+    _isGlowBg: !(glow.stackPos),  // stackPos=0 means behind all user objects
+  });
+}
+
+function applyGlow(sec, fc) {
+  _suppressHistoryPush = true;
+  try {
+    const cv = fc || canvas;
+    cv.getObjects().filter(o => o._isGlow).forEach(o => cv.remove(o));
+    const glows = sec.bgGlows || [];
+    if (!glows.length) { cv.requestRenderAll(); return; }
+    const cw = CANVAS_W;
+    const ch = sec.height || 700;
+
+    // Place each glow at its stackPos relative to user-content objects.
+    // stackPos=0 → behind all content; stackPos=1 → above first content obj; etc.
+    // Glows are inserted in ascending stackPos order so earlier insertions don't
+    // shift the anchor index for later ones.
+    const sortedGlows = [...glows].sort((a, b) => (a.stackPos || 0) - (b.stackPos || 0));
+    sortedGlows.forEach(glow => {
+      const sp = Math.max(0, glow.stackPos || 0);
+      // Content objects = everything except glow and glitter layers.
+      const allObjs  = cv.getObjects();
+      const content  = allObjs.filter(o => !o._isGlow && !o._isGlitter);
+      // Insert just before the sp-th content object; if sp >= count, append at end.
+      const anchor   = content[sp];
+      const insertAt = anchor ? allObjs.indexOf(anchor) : allObjs.length;
+
+      cv.insertAt(_renderGlowImage(glow, cw, ch), insertAt);
+      if (!fc) {
+        const cx = cw * (glow.x !== undefined ? glow.x : 0.5);
+        const cy = ch * (glow.y !== undefined ? glow.y : 0.5);
+        cv.insertAt(new fabric.Circle({
+          left: cx, top: cy, originX: 'center', originY: 'center',
+          radius: 12, fill: 'rgba(255,200,50,0.45)',
+          stroke: 'rgba(255,220,80,0.9)', strokeWidth: 2,
+          selectable: false, evented: false, hoverCursor: 'default',
+          _isGlow: true, _glowId: glow.id, _isGlowHandle: true,
+        }), insertAt + 1);
+      }
+    });
+
+    cv.requestRenderAll();
+  } finally {
+    _suppressHistoryPush = false;
+  }
+}
+
+/* ── Glitter / sun-rays overlay ─────────────────────────────────────────── */
+// Draws alternating wide/narrow radial rays for every glow in sec.bgGlows onto
+// one off-screen canvas, then places the result as a fabric.Image just above the
+// glow layer. Fixed LCG seed keeps ray layout stable across re-renders.
+function applyGlitter(sec, fc) {
+  _suppressHistoryPush = true;
+  try {
+    const cv = fc || canvas;
+    cv.getObjects().filter(o => o._isGlitter).forEach(o => cv.remove(o));
+    const g = sec.glitter;
+    if (!g || !g.enabled) { cv.requestRenderAll(); return; }
+    const glows = sec.bgGlows || [];
+    if (!glows.length) { cv.requestRenderAll(); return; }
+
+    const cw = CANVAS_W;
+    const ch = sec.height || 700;
+    const level   = g.level || 0.5;
+    const numRays = Math.round(16 + level * 32) * 2; // always even so pairs align
+    const step    = (Math.PI * 2) / numRays;
+
+    const el  = document.createElement('canvas');
+    el.width  = cw; el.height = ch;
+    const ctx = el.getContext('2d');
+
+    // Fixed-seed LCG for a stable rotation offset every render.
+    let s = 0xA3F1B2C4;
+    const rand = () => { s = Math.imul(s ^ (s >>> 15), s | 1); s ^= s + Math.imul(s ^ (s >>> 7), s | 61); return ((s ^ (s >>> 14)) >>> 0) / 0x100000000; };
+    const baseAngle = rand() * Math.PI * 2;
+
+    glows.forEach(glow => {
+      const cx     = cw * (glow.x !== undefined ? glow.x : 0.5);
+      const cy     = ch * (glow.y !== undefined ? glow.y : 0.5);
+      const radius = Math.sqrt(cw * cw + ch * ch) * Math.max(0.1, glow.area || 0.5);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.clip();
+
+      for (let i = 0; i < numRays; i++) {
+        const angle     = baseAngle + i * step;
+        const isPrimary = i % 2 === 0;
+        const halfSpan  = step * (isPrimary ? 0.38 : 0.18);
+        const alpha     = isPrimary ? 0.25 + level * 0.35 : 0.1 + level * 0.2;
+        const ex   = cx + Math.cos(angle) * radius;
+        const ey   = cy + Math.sin(angle) * radius;
+        const grad = ctx.createLinearGradient(cx, cy, ex, ey);
+        grad.addColorStop(0,   `rgba(255,230,100,${alpha})`);
+        grad.addColorStop(0.5, `rgba(255,200,50,${(alpha * 0.6).toFixed(3)})`);
+        grad.addColorStop(1,   'rgba(255,180,30,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, angle - halfSpan, angle + halfSpan);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+
+    const img = new fabric.Image(el, {
+      left: 0, top: 0, originX: 'left', originY: 'top',
+      width: cw, height: ch, scaleX: 1, scaleY: 1,
+      selectable: false, evented: false, hoverCursor: 'default',
+      _isGlitter: true,
+    });
+    // Insert above background (stackPos=0) glow layers but below user objects.
+    const bgGlowCount = cv.getObjects().filter(o => o._isGlow && o._isGlowBg).length;
+    cv.insertAt(img, bgGlowCount);
+    cv.requestRenderAll();
+  } finally {
+    _suppressHistoryPush = false;
   }
 }
 
@@ -574,6 +803,8 @@ function switchSection(idx) {
     } else {
       canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
     }
+    applyGlow(sec);
+    applyGlitter(sec);
     // Re-render once the section's web fonts are confirmed loaded.
     // document.fonts.ready is unreliable for lazily-loaded @font-face — it resolves
     // immediately if nothing is actively downloading. Use explicit per-font loads.
@@ -634,7 +865,7 @@ function switchSection(idx) {
 function saveCurrentSectionObjects() {
   if (activeSec < 0 || activeSec >= sections.length) return;
   if (_sectionLoading > 0) return; // don't overwrite section data while enlivenObjects is in flight
-  sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
+  sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects.filter(o => !o._isGlow && !o._isGlitter);
 }
 
 // Use for explicit snapshots only (save / preview / export / section switch).
@@ -654,7 +885,74 @@ function snapshotCurrentSection() {
     // which visibly drifts objects across the canvas over time.
     canvas.discardActiveObject();
   }
-  sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects;
+  sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects.filter(o => !o._isGlow && !o._isGlitter);
+}
+
+/* ── Glow list UI (dynamic per-section) ─────────────────────────────────── */
+function renderGlowList(sec) {
+  const list = document.getElementById('sp-glow-list');
+  list.innerHTML = '';
+  (sec.bgGlows || []).forEach((glow, idx) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'border:1px solid #555;border-radius:4px;padding:4px 6px;background:#2a2a2a;margin-top:4px';
+    const sp = glow.stackPos || 0;
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:11px;color:#ffd700;font-weight:600">Glow ${idx + 1}</span>
+        <div style="display:flex;gap:3px;align-items:center">
+          <button class="glow-bg" title="Send one layer back" style="padding:1px 6px;font-size:12px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">▼</button>
+          <span class="glow-level" style="font-size:10px;color:#aaa;min-width:18px;text-align:center">${sp}</span>
+          <button class="glow-fg" title="Bring one layer forward" style="padding:1px 6px;font-size:12px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">▲</button>
+          <button class="glow-rm" style="padding:1px 6px;font-size:11px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">✕</button>
+        </div>
+      </div>
+      <label style="display:block;font-size:11px;color:#ccc">Intensity
+        <input type="range" class="glow-intensity" min="0" max="100" value="${Math.round((glow.intensity || 0.6) * 100)}" style="width:100%;margin-top:2px">
+      </label>
+      <label style="display:block;font-size:11px;color:#ccc;margin-top:3px">Area
+        <input type="range" class="glow-area" min="10" max="100" value="${Math.round((glow.area || 0.5) * 100)}" style="width:100%;margin-top:2px">
+      </label>
+    `;
+    div.querySelector('.glow-bg').addEventListener('click', () => {
+      if (activeSec < 0) return;
+      glow.stackPos = Math.max(0, (glow.stackPos || 0) - 1);
+      renderGlowList(sec);
+      applyGlow(sec);
+      applyGlitter(sec);
+      markDirty();
+    });
+    div.querySelector('.glow-fg').addEventListener('click', () => {
+      if (activeSec < 0) return;
+      glow.stackPos = (glow.stackPos || 0) + 1;
+      renderGlowList(sec);
+      applyGlow(sec);
+      applyGlitter(sec);
+      markDirty();
+    });
+    div.querySelector('.glow-rm').addEventListener('click', () => {
+      if (activeSec < 0) return;
+      sec.bgGlows.splice(idx, 1);
+      renderGlowList(sec);
+      applyGlow(sec);
+      applyGlitter(sec);
+      markDirty();
+    });
+    div.querySelector('.glow-intensity').addEventListener('input', e => {
+      if (activeSec < 0) return;
+      glow.intensity = parseInt(e.target.value, 10) / 100;
+      applyGlow(sec);
+      applyGlitter(sec);
+      markDirty();
+    });
+    div.querySelector('.glow-area').addEventListener('input', e => {
+      if (activeSec < 0) return;
+      glow.area = parseInt(e.target.value, 10) / 100;
+      applyGlow(sec);
+      applyGlitter(sec);
+      markDirty();
+    });
+    list.appendChild(div);
+  });
 }
 
 /* ── Section props panel ────────────────────────────────────────────────── */
@@ -681,6 +979,13 @@ function renderSectionProps() {
 
   // hide grad-dir if radial (direction doesn't apply)
   document.getElementById('sp-bg-grad-dir').style.display = (type === 'radial') ? 'none' : '';
+
+  renderGlowList(sec);
+
+  const gli = sec.glitter || {};
+  document.getElementById('sp-glitter-enabled').checked = !!gli.enabled;
+  document.getElementById('sp-glitter-level').value     = Math.round((gli.level || 0.5) * 100);
+  document.getElementById('sp-glitter-settings').style.display = gli.enabled ? '' : 'none';
 }
 
 function bindSectionProps() {
@@ -746,6 +1051,38 @@ function bindSectionProps() {
   document.getElementById('sp-bg-size').addEventListener('change', e => {
     if (activeSec < 0) return;
     sections[activeSec].bgSize = e.target.value;
+    markDirty();
+  });
+
+  // Golden glow controls — dynamic per-glow list rendered by renderGlowList()
+  document.getElementById('btn-add-glow').addEventListener('click', () => {
+    if (activeSec < 0) return;
+    const sec = sections[activeSec];
+    if (!sec.bgGlows) sec.bgGlows = [];
+    sec.bgGlows.push({ id: `glow-${Date.now()}`, intensity: 0.6, area: 0.5, x: 0.5, y: 0.5, stackPos: 0 });
+    renderGlowList(sec);
+    applyGlow(sec);
+    applyGlitter(sec);
+    markDirty();
+  });
+
+  // Glitter controls
+  const getGlitter = () => {
+    const sec = sections[activeSec];
+    if (!sec.glitter) sec.glitter = { enabled: false, level: 0.5 };
+    return sec.glitter;
+  };
+  document.getElementById('sp-glitter-enabled').addEventListener('change', e => {
+    if (activeSec < 0) return;
+    getGlitter().enabled = e.target.checked;
+    document.getElementById('sp-glitter-settings').style.display = e.target.checked ? '' : 'none';
+    applyGlitter(sections[activeSec]);
+    markDirty();
+  });
+  document.getElementById('sp-glitter-level').addEventListener('input', e => {
+    if (activeSec < 0) return;
+    getGlitter().level = parseInt(e.target.value, 10) / 100;
+    applyGlitter(sections[activeSec]);
     markDirty();
   });
   document.getElementById('sp-bg-image-btn').addEventListener('click', async () => {
@@ -950,6 +1287,7 @@ function bindToolbar() {
     canvas.renderAll(); onCanvasChange();
   });
   document.getElementById('btn-cutout').addEventListener('click', cutoutImage);
+  document.getElementById('btn-crop').addEventListener('click', openCropModal);
 
   // Shape
   document.getElementById('prop-shape-fill').addEventListener('input',  e => applyShape('fill', e.target.value));
@@ -996,8 +1334,10 @@ function bindToolbar() {
   document.getElementById('btn-save').addEventListener('click',         () => saveProject(false));
   document.getElementById('btn-preview').addEventListener('click',      previewHTML);
   document.getElementById('btn-export').addEventListener('click',       exportHTML);
-  document.getElementById('btn-export-print').addEventListener('click', exportPrint);
-  document.getElementById('btn-export-pdf').addEventListener('click',   exportPDF);
+  document.getElementById('btn-export-print').addEventListener('click',  exportPrint);
+  document.getElementById('btn-export-pdf').addEventListener('click',         exportPDF);
+  document.getElementById('btn-export-digital-pdf').addEventListener('click', exportDigitalPDF);
+  document.getElementById('btn-export-twoup').addEventListener('click',        exportTwoUp);
 }
 
 function applyText(prop, val) {
@@ -1254,10 +1594,176 @@ async function cutoutImage() {
   }
 }
 
+/* ── Image Crop ─────────────────────────────────────────────────────────── */
+function openCropModal() {
+  const obj = canvas.getActiveObject();
+  if (!obj || obj.type !== 'image') return;
+
+  const el   = obj.getElement();
+  const imgW = el.naturalWidth  || el.width  || obj.width;
+  const imgH = el.naturalHeight || el.height || obj.height;
+
+  const MAX_W = 700, MAX_H = 480;
+  const scale = Math.min(MAX_W / imgW, MAX_H / imgH, 1);
+  const dispW = Math.round(imgW * scale);
+  const dispH = Math.round(imgH * scale);
+
+  const img = document.getElementById('crop-img');
+  img.src = el.src;
+  img.style.width  = dispW + 'px';
+  img.style.height = dispH + 'px';
+
+  const host = document.getElementById('crop-image-host');
+  host.style.width  = dispW + 'px';
+  host.style.height = dispH + 'px';
+
+  _cropState = { obj, scale, imgW, imgH, dispW, dispH, cropX: 0, cropY: 0, cropW: imgW, cropH: imgH };
+  updateCropRect();
+  document.getElementById('crop-overlay').classList.add('open');
+}
+
+function updateCropRect() {
+  if (!_cropState) return;
+  const { scale, cropX, cropY, cropW, cropH } = _cropState;
+
+  const dx = Math.round(cropX * scale);
+  const dy = Math.round(cropY * scale);
+  const dw = Math.max(2, Math.round(cropW * scale));
+  const dh = Math.max(2, Math.round(cropH * scale));
+
+  const rect = document.getElementById('crop-rect');
+  rect.style.left   = dx + 'px';
+  rect.style.top    = dy + 'px';
+  rect.style.width  = dw + 'px';
+  rect.style.height = dh + 'px';
+
+  document.getElementById('crop-info').textContent = `${cropW} × ${cropH} px`;
+}
+
+function closeCropModal() {
+  _cropState = null;
+  document.getElementById('crop-overlay').classList.remove('open');
+}
+
+async function applyCropModal() {
+  if (!_cropState) return;
+  const { obj, imgW, imgH, cropX, cropY, cropW, cropH } = _cropState;
+  if (cropW < 1 || cropH < 1) { closeCropModal(); return; }
+
+  const el    = obj.getElement();
+  const tmpC  = document.createElement('canvas');
+  tmpC.width  = cropW;
+  tmpC.height = cropH;
+  tmpC.getContext('2d').drawImage(el, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+  closeCropModal();
+  setStatus('Saving cropped image…');
+
+  const dataUrl   = tmpC.toDataURL('image/png');
+  const assetName = await window.editorAPI.importAssetData(dataUrl, 'png');
+
+  fabric.Image.fromURL('asset://' + assetName, newImg => {
+    newImg.set({
+      left:        obj.left,
+      top:         obj.top,
+      scaleX:      (obj.scaleX * obj.width)  / newImg.width,
+      scaleY:      (obj.scaleY * obj.height) / newImg.height,
+      angle:       obj.angle,
+      opacity:     obj.opacity,
+      strokeWidth: obj.strokeWidth || 0,
+      stroke:      obj.stroke,
+      _grayscale:  obj._grayscale,
+    });
+    canvas.remove(obj);
+    canvas.add(newImg);
+    canvas.setActiveObject(newImg);
+    canvas.renderAll();
+    onCanvasChange();
+    setStatus('Crop applied.');
+  }, { crossOrigin: 'anonymous' });
+}
+
+function bindCropHandlers() {
+  let dragMode  = null;   // null | 'move' | handle-pos string (nw, n, ne, …)
+  let dragStart = null;   // { mx, my, cropX, cropY, cropW, cropH, scale, imgW, imgH }
+
+  const rect = document.getElementById('crop-rect');
+
+  rect.addEventListener('mousedown', e => {
+    if (e.target !== rect) return;
+    e.preventDefault();
+    if (!_cropState) return;
+    dragMode  = 'move';
+    dragStart = { mx: e.clientX, my: e.clientY, ..._cropState };
+  });
+
+  rect.querySelectorAll('.ch').forEach(handle => {
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!_cropState) return;
+      dragMode  = handle.dataset.pos;
+      dragStart = { mx: e.clientX, my: e.clientY, ..._cropState };
+    });
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragMode || !dragStart || !_cropState) return;
+
+    const dx = (e.clientX - dragStart.mx) / dragStart.scale;
+    const dy = (e.clientY - dragStart.my) / dragStart.scale;
+    const { imgW, imgH } = dragStart;
+    let { cropX, cropY, cropW, cropH } = dragStart;
+
+    const MIN = 20;
+
+    if (dragMode === 'move') {
+      cropX = Math.max(0, Math.min(imgW - cropW, cropX + dx));
+      cropY = Math.max(0, Math.min(imgH - cropH, cropY + dy));
+    } else {
+      if (dragMode.includes('n')) {
+        const newY = Math.max(0, Math.min(cropY + cropH - MIN, cropY + dy));
+        cropH = cropH + (cropY - newY);
+        cropY = newY;
+      }
+      if (dragMode.includes('s')) {
+        cropH = Math.max(MIN, Math.min(imgH - cropY, cropH + dy));
+      }
+      if (dragMode.includes('w')) {
+        const newX = Math.max(0, Math.min(cropX + cropW - MIN, cropX + dx));
+        cropW = cropW + (cropX - newX);
+        cropX = newX;
+      }
+      if (dragMode.includes('e')) {
+        cropW = Math.max(MIN, Math.min(imgW - cropX, cropW + dx));
+      }
+    }
+
+    _cropState.cropX = Math.round(cropX);
+    _cropState.cropY = Math.round(cropY);
+    _cropState.cropW = Math.round(cropW);
+    _cropState.cropH = Math.round(cropH);
+    updateCropRect();
+  });
+
+  document.addEventListener('mouseup', () => { dragMode = null; dragStart = null; });
+
+  document.getElementById('btn-crop-apply').addEventListener('click', applyCropModal);
+  document.getElementById('btn-crop-cancel').addEventListener('click', closeCropModal);
+  document.getElementById('btn-crop-reset').addEventListener('click', () => {
+    if (!_cropState) return;
+    _cropState.cropX = 0;
+    _cropState.cropY = 0;
+    _cropState.cropW = _cropState.imgW;
+    _cropState.cropH = _cropState.imgH;
+    updateCropRect();
+  });
+}
+
 /* ── Undo / Redo ────────────────────────────────────────────────────────── */
 function pushHistory() {
   if (activeSec < 0) return;
-  const json = JSON.stringify(canvas.toJSON(CANVAS_JSON_PROPS).objects);
+  const json = JSON.stringify(canvas.toJSON(CANVAS_JSON_PROPS).objects.filter(o => !o._isGlow && !o._isGlitter));
   const h    = history[activeSec];
   const idx  = historyIdx[activeSec];
   h.splice(idx + 1);
@@ -1285,6 +1791,7 @@ function scheduleRecovery() {
 }
 
 function onCanvasChange() {
+  if (_suppressHistoryPush) return;
   pushHistory();
   saveCurrentSectionObjects();
   markDirty();
@@ -1314,6 +1821,8 @@ function restoreHistory(json) {
     } else {
       canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
     }
+    applyGlow(sec);
+    applyGlitter(sec);
     canvas.renderAll();
     canvas.on('object:added',   onCanvasChange);
     canvas.on('object:removed', onCanvasChange);
@@ -1472,6 +1981,11 @@ function initSections(defs) {
     bgGrad1: s.bgGrad1 || '#5a0a2e', bgGrad2: s.bgGrad2 || '#c9a84c',
     bgGradDir: s.bgGradDir || 'to bottom',
     bgTexture: s.bgTexture || 'dots', bgTexFg: s.bgTexFg || '#c9a84c', bgTexBg: s.bgTexBg || '#5a0a2e',
+    // Migrate old single bgGlow → bgGlows array.
+    bgGlows: s.bgGlows ? s.bgGlows.map(g => ({ stackPos: 0, ...g, foreground: undefined }))
+           : (s.bgGlow && s.bgGlow.enabled) ? [{ ...s.bgGlow, id: s.bgGlow.id || 'glow-0', stackPos: 0 }]
+           : [],
+    glitter: s.glitter ? { ...s.glitter } : null,
     objects: s.objects || [],
   }));
   history    = sections.map(s => [JSON.stringify(s.objects)]);
@@ -1505,10 +2019,15 @@ async function exportHTML() {
     const images    = [];
     const seenNames = new Set();
 
+    const safeW = CANVAS_W - 2 * SAFE_MARGIN_PX;
     const sectionsHTML = sections.map(sec => {
-      const bgStyle  = buildBgStyleForFolder(sec, seenNames, images);
-      const objsHtml = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames)).join('\n');
-      return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;margin:0 auto 12px;">\n${objsHtml}\n  </section>`;
+      const bgStyle     = buildBgStyleForFolder(sec, seenNames, images);
+      const safeH       = sec.height - 2 * SAFE_MARGIN_PX;
+      const objsHtmlArr = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames));
+      const children    = mergeGlowsIntoHTML(objsHtmlArr, buildGlowsHTML(sec)).join('\n');
+      return `  <section class="bs" style="width:${safeW}px;height:${safeH}px;position:relative;overflow:hidden;margin:0 auto 12px;">\n` +
+        `    <div style="position:absolute;left:-${SAFE_MARGIN_PX}px;top:-${SAFE_MARGIN_PX}px;width:${CANVAS_W}px;height:${sec.height}px;${bgStyle}">\n` +
+        `${children}\n    </div>\n  </section>`;
     }).join('\n\n');
 
     const googleFontsUrl = buildGoogleFontsUrl(usedFonts);
@@ -1540,7 +2059,7 @@ ${sectionsHTML}
 </div></div>
 <script>
 (function(){
-  var W=${CANVAS_W};
+  var W=${CANVAS_W - 2 * SAFE_MARGIN_PX};
   function fit(){
     var vw=window.innerWidth;
     if(vw>=W)return;
@@ -1592,12 +2111,14 @@ function renderSectionToDataUrl(sec, multiplier) {
       finally { cleanup(); }
     };
 
+    const afterGlow = () => { applyGlow(sec, fc); applyGlitter(sec, fc); doExport(); };
+
     // Apply background image on top of colour/gradient, then export.
     const afterBgColor = () => {
       if (sec.bgImage) {
-        fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec, fc, doExport), { crossOrigin: 'anonymous' });
+        fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec, fc, afterGlow), { crossOrigin: 'anonymous' });
       } else {
-        doExport();
+        afterGlow();
       }
     };
 
@@ -1651,7 +2172,32 @@ function renderSectionToDataUrl(sec, multiplier) {
 const PRINT_DPI  = 300;
 const PRINT_W_IN = 6.00;
 const PRINT_H_IN = 8.50;
-const PRINT_MULTIPLIER = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 1800 / 794 ≈ 2.267
+const PRINT_MULTIPLIER  = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 1800 / 794 ≈ 2.267
+// 0.25 inch safe margin in canvas pixels (editor guide only — never exported)
+const SAFE_MARGIN_PX = Math.round(0.25 * CANVAS_W / PRINT_W_IN); // ≈ 33px
+// Screens read ~15% brighter than print; this boosts PDF backgrounds to compensate
+// for dot gain and the sRGB→CMYK darkening most printer RIPs apply without an ICC profile.
+// Raise toward 1.25 if output is still too dark; lower toward 1.05 if it looks washed out.
+const PRINT_BRIGHTNESS_BOOST = 1.15;
+
+function drawSafeMarginGuide() {
+  const zoom = canvas.getZoom();
+  const dpr  = window.devicePixelRatio || 1;
+  const h    = canvas.getHeight() / zoom; // logical section height in px
+  const ctx  = canvas.getContext('2d');
+  ctx.save();
+  // Reset Fabric's viewport transform but keep retina DPR scaling so our
+  // coordinates stay in CSS pixels (1 unit = dpr device pixels on HiDPI).
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const m = SAFE_MARGIN_PX * zoom;
+  const W = CANVAS_W * zoom;
+  const H = h * zoom;
+  ctx.strokeStyle = 'rgba(255, 100, 0, 0.7)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(m, m, W - 2 * m, H - 2 * m);
+  ctx.restore();
+}
 
 async function _renderAllSections(onProgress) {
   clearTimeout(_recoveryTimer);
@@ -1676,15 +2222,305 @@ async function exportPrint() {
   setStatus(`PNG export: ${imageFiles.length} images @ ${PRINT_DPI} DPI (2550×1800px) → ${destDir}`);
 }
 
+// Lighten a PNG data URL by factor (e.g. 1.15 = 15% brighter) via CSS filter.
+// Used to compensate for screen-vs-print brightness gap before PDF embedding.
+function applyBrightness(dataUrl, factor) {
+  if (factor === 1) return Promise.resolve(dataUrl);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d');
+      ctx.filter = `brightness(${factor})`;
+      ctx.drawImage(img, 0, 0);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.src = dataUrl;
+  });
+}
+
+// Crop a rendered PNG data URL to the safe content area by removing the 0.25" bleed
+// zone from each edge. Used for digital PDF only — print exports keep the full bleed.
+function cropToSafeArea(dataUrl) {
+  const m = Math.round(0.25 * PRINT_DPI); // 75px at 300 DPI
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const cw = img.naturalWidth  - 2 * m;
+      const ch = img.naturalHeight - 2 * m;
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, cw);
+      c.height = Math.max(1, ch);
+      c.getContext('2d').drawImage(img, m, m, cw, ch, 0, 0, cw, ch);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.src = dataUrl;
+  });
+}
+
+// Render a section for vector PDF export: background PNG (no text) + text data.
+function renderSectionForPdf(sec, multiplier) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('canvas');
+    el.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+    document.body.appendChild(el);
+
+    const fc = new fabric.StaticCanvas(el, {
+      width: CANVAS_W, height: sec.height, enableRetinaScaling: false,
+    });
+    const cleanup = () => { try { fc.dispose(); } catch {} el.remove(); };
+
+    const doExport = async () => {
+      // Extract text data from sec.objects JSON for positions/styles (more reliable than
+      // live Fabric objects which can silently drop complex styles like gradients/cutouts).
+      // textLines is NOT serialised in JSON — it's a computed Fabric property — so we
+      // build a positional lookup from live canvas objects to get the actual wrapped lines.
+      const allObjs  = sec.objects || [];
+      const textObjs = allObjs.filter(o => o.type === 'textbox' || o.type === 'i-text');
+      console.log(`[PDF] section "${sec.name}": total objects=${allObjs.length}, text objects=${textObjs.length}`);
+
+      // Live Fabric text objects are loaded in the same order as sec.objects JSON entries.
+      const liveTextObjs = fc.getObjects().filter(o => o.type === 'textbox' || o.type === 'i-text');
+
+      // For each textLines array, compute which indices are paragraph-ending lines.
+      // A paragraph ends at the last wrapped line before an explicit \n (or the very last line).
+      // These lines must NOT be fully justified — they stay left-aligned.
+      function computeParaEndFlags(text, textLines) {
+        const flags = new Array(textLines.length).fill(false);
+        if (!textLines.length) return flags;
+        flags[textLines.length - 1] = true; // Last line is always a paragraph end.
+        const paras = (text || '').split('\n');
+        if (paras.length <= 1) return flags; // Single paragraph — only last line is end.
+        let li = 0;
+        for (let pi = 0; pi < paras.length - 1 && li < textLines.length; pi++) {
+          const target = paras[pi].replace(/\s+/g, ' ').trim();
+          let acc = '';
+          while (li < textLines.length) {
+            acc = acc ? acc + ' ' + textLines[li] : textLines[li];
+            li++;
+            // Stop accumulating when accumulated text matches the paragraph (or overshoots).
+            if (acc.replace(/\s+/g, ' ').trim() === target || acc.length >= target.length) {
+              flags[li - 1] = true;
+              break;
+            }
+          }
+        }
+        return flags;
+      }
+
+      const textData = textObjs.map((o, i) => {
+          const scaleX = o.scaleX || 1, scaleY = o.scaleY || 1;
+          const w = (o.width || 0) * scaleX, h = (o.height || 0) * scaleY;
+          const ox = o.originX || 'left', oy = o.originY || 'top';
+          const left = ox === 'center' ? (o.left || 0) - w / 2
+                     : ox === 'right'  ? (o.left || 0) - w
+                     :                   (o.left || 0);
+          const top  = oy === 'center' ? (o.top  || 0) - h / 2
+                     : oy === 'bottom' ? (o.top  || 0) - h
+                     :                   (o.top  || 0);
+          // textLines from the live Fabric object — computed by Canvas2D, matches the editor.
+          const live = liveTextObjs[i];
+          const textLines = (live && Array.isArray(live.textLines) && live.textLines.length)
+                            ? live.textLines.map(String)
+                            : null;
+          const isParaEnd = textLines ? computeParaEndFlags(o.text || '', textLines) : null;
+          const entry = {
+            left:       Math.round(left),
+            top:        Math.round(top),
+            width:      Math.round(w),
+            height:     Math.round(h),
+            angle:      o.angle       || 0,
+            fontFamily: o.fontFamily  || 'Georgia',
+            fontSize:   Math.round((o.fontSize || 16) * scaleY),
+            fontWeight: o.fontWeight  || 'normal',
+            fontStyle:  o.fontStyle   || 'normal',
+            fill:       typeof o.fill === 'string' ? o.fill : '#000000',
+            textAlign:  (o.textAlign  || 'left').replace('justify-left', 'justify'),
+            opacity:    o.opacity != null ? o.opacity : 1,
+            text:       o.text        || '',
+            textLines,
+            isParaEnd,
+            lineHeight: o.lineHeight  || 1.16,
+          };
+          console.log(`[PDF]   text "${entry.text.slice(0,40).replace(/\n/g,'\\n')}" font=${entry.fontFamily} size=${entry.fontSize} fill=${entry.fill} left=${entry.left} top=${entry.top} w=${entry.width} lines=${textLines ? textLines.length : 'null'}`);
+          return entry;
+        });
+
+      // Hide text in the StaticCanvas for the background-only PNG.
+      fc.getObjects().forEach(obj => {
+        if (obj.type === 'textbox' || obj.type === 'i-text') obj.visible = false;
+      });
+
+      fc.renderAll();
+      let bgDataUrl;
+      try { bgDataUrl = fc.toDataURL({ format: 'png', multiplier }); }
+      catch (e) { cleanup(); reject(e); return; }
+      cleanup();
+      bgDataUrl = await applyBrightness(bgDataUrl, PRINT_BRIGHTNESS_BOOST);
+      resolve({ bgDataUrl, textData });
+    };
+
+    const afterBgColor = () => {
+      const afterGlowPdf = () => { applyGlow(sec, fc); applyGlitter(sec, fc); doExport(); };
+      if (sec.bgImage) {
+        fabric.Image.fromURL(sec.bgImage, img => applyBgImageToCanvas(img, sec, fc, afterGlowPdf), { crossOrigin: 'anonymous' });
+      } else {
+        afterGlowPdf();
+      }
+    };
+
+    const applyBg = () => {
+      const type = sec.bgType || 'solid';
+      if (type === 'linear' || type === 'radial') {
+        const grad = makeFabricGradient(type, sec.bgGrad1 || '#ffffff', sec.bgGrad2 || '#000000',
+                                        sec.bgGradDir || 'to bottom', CANVAS_W, sec.height);
+        fc.setBackgroundColor(grad, afterBgColor);
+      } else if (type === 'texture') {
+        const svgUrl = makeTextureSVG(sec.bgTexture || 'dots', sec.bgTexFg || '#c9a84c', sec.bgTexBg || '#5a0a2e');
+        fabric.Image.fromURL(svgUrl, img => {
+          const pat = new fabric.Pattern({ source: img.getElement(), repeat: 'repeat' });
+          fc.setBackgroundColor(pat, afterBgColor);
+        });
+      } else {
+        fc.setBackgroundColor(sec.bg || '#ffffff', afterBgColor);
+      }
+    };
+
+    const afterLoad = () => {
+      const fontLoads = [];
+      fc.getObjects().forEach(obj => {
+        if ((obj.type === 'textbox' || obj.type === 'i-text') && obj.fontFamily) {
+          ['400', '700', 'italic 400'].forEach(v =>
+            fontLoads.push(document.fonts.load(`${v} 16px "${obj.fontFamily}"`).catch(() => {}))
+          );
+        }
+      });
+      Promise.all(fontLoads).then(() => {
+        fc.getObjects().forEach(obj => {
+          if (obj.type === 'textbox' || obj.type === 'i-text') { obj.dirty = true; obj.initDimensions(); }
+        });
+        applyBg();
+      });
+    };
+
+    if (sec.objects && sec.objects.length) {
+      fc.loadFromJSON({ version: '5.3.0', objects: sec.objects }, afterLoad);
+    } else {
+      afterLoad();
+    }
+  });
+}
+
 async function exportPDF() {
   const destDir = await window.editorAPI.exportDir();
   if (!destDir) return;
-  const files = await _renderAllSections((n, t) => setStatus(`Rendering section ${n}/${t} for CMYK PDF…`));
-  setStatus(`Assembling CMYK PDF…`);
-  const destPath = await window.editorAPI.exportToPdf(
-    destDir, files, { wIn: PRINT_W_IN, hIn: PRINT_H_IN, dpi: PRINT_DPI }
-  );
-  setStatus(`PDF export: ${files.length} page${files.length !== 1 ? 's' : ''}, CMYK @ ${PRINT_DPI} DPI → ${destPath}`);
+
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
+
+  // Collect all Google Fonts used across sections (for main process to download).
+  const allFonts = new Set();
+  sections.forEach(sec => {
+    (sec.objects || []).forEach(obj => {
+      if ((obj.type === 'textbox' || obj.type === 'i-text') && obj.fontFamily) {
+        allFonts.add(obj.fontFamily);
+      }
+    });
+  });
+  // Also include custom fonts; filter to only Google-downloadable ones.
+  const googleFontsList = [...allFonts].filter(f => GOOGLE_FONTS.has(f) ||
+    customFonts.some(cf => cf.name === f));
+
+  const total = sections.length;
+  const pdfSections = [];
+  for (let i = 0; i < total; i++) {
+    setStatus(`Rendering section ${i + 1}/${total} for PDF…`);
+    const result = await renderSectionForPdf(sections[i], PRINT_MULTIPLIER);
+    pdfSections.push(result);
+  }
+
+  setStatus(`Assembling PDF with vector text…`);
+  console.log('[PDF] calling exportToPdfVector — sections:', pdfSections.length, 'fonts:', googleFontsList);
+  let ipcResult;
+  try {
+    ipcResult = await window.editorAPI.exportToPdfVector(
+      destDir, pdfSections, googleFontsList, { wIn: PRINT_W_IN, hIn: PRINT_H_IN, dpi: PRINT_DPI, canvasW: CANVAS_W }
+    );
+  } catch (err) {
+    console.error('[PDF] exportToPdfVector IPC FAILED:', err && err.message, err);
+    setStatus(`PDF export failed: ${err && err.message}`);
+    return;
+  }
+  // Main process returns { destPath, logs } so its logs appear in DevTools.
+  const { destPath, logs: mainLogs } = ipcResult || {};
+  (mainLogs || []).forEach(l => console.log('[main]', l));
+  setStatus(`PDF export: ${pdfSections.length} page${pdfSections.length !== 1 ? 's' : ''} → ${destPath || '(no path)'}`);
+}
+
+/* Digital PDF: sRGB raster, content cropped to the safe area (0.25" bleed removed from
+   each edge). Page size = trim size: 5.50" × 8.00" (6.00" - 0.50" × 8.50" - 0.50"). */
+async function exportDigitalPDF() {
+  const destDir = await window.editorAPI.exportDir();
+  if (!destDir) return;
+
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
+
+  const total = sections.length;
+  const images = [];
+  for (let i = 0; i < total; i++) {
+    setStatus(`Rendering section ${i + 1}/${total} for digital PDF…`);
+    const dataUrl = await renderSectionToDataUrl(sections[i], PRINT_MULTIPLIER);
+    const cropped = await cropToSafeArea(dataUrl);
+    images.push({ dataUrl: cropped });
+  }
+
+  setStatus('Assembling digital PDF…');
+  const safeWIn = PRINT_W_IN - 0.50; // 5.50" — 6.00" minus 0.25" bleed on each side
+  const safeHIn = PRINT_H_IN - 0.50; // 8.00" — 8.50" minus 0.25" bleed on each side
+  try {
+    const destPath = await window.editorAPI.exportToPdf(
+      destDir, images, { wIn: safeWIn, hIn: safeHIn, filename: 'brochure-digital.pdf' }
+    );
+    setStatus(`Digital PDF: ${total} page${total !== 1 ? 's' : ''} → ${destPath}`);
+  } catch (err) {
+    setStatus(`Digital PDF export failed: ${err && err.message}`);
+  }
+}
+
+/* Two-Up PNG: sections 4 + 5 side-by-side on 12"×8.5" landscape at 300 DPI.
+   Each section fills its 6"×8.5" slot exactly (1800×2550px) — no crop, no borders. */
+async function exportTwoUp() {
+  if (sections.length < 5) {
+    setStatus('Two-Up export needs at least 5 sections (sections 4 & 5 will be combined side-by-side).');
+    return;
+  }
+  const destDir = await window.editorAPI.exportDir();
+  if (!destDir) return;
+
+  clearTimeout(_recoveryTimer);
+  snapshotCurrentSection();
+
+  // Scale each section so its height fills 8.5" @ 300 DPI = 2550px exactly.
+  const TWO_UP_H = 2550;
+  const mult3 = TWO_UP_H / (sections[3].height || 1124);
+  const mult4 = TWO_UP_H / (sections[4].height || 1124);
+
+  setStatus('Rendering section 4 for Two-Up…');
+  const url3 = await renderSectionToDataUrl(sections[3], mult3);
+  setStatus('Rendering section 5 for Two-Up…');
+  const url4 = await renderSectionToDataUrl(sections[4], mult4);
+
+  setStatus('Building Two-Up PNG…');
+  let result;
+  try {
+    result = await window.editorAPI.exportTwoUp(destDir, [{ dataUrl: url3 }, { dataUrl: url4 }]);
+  } catch (err) {
+    setStatus('Two-Up export failed: ' + (err && err.message));
+    return;
+  }
+  setStatus('Two-Up PNG: ' + (result && result.destPath ? result.destPath : 'done'));
 }
 
 /* Fabric stores left/top at the object's originX/originY point.
@@ -1844,6 +2680,39 @@ function assetName(src) {
   try { return new URL(src).hostname; } catch { return src.slice(8); }
 }
 
+// Convert sec.bgGlows into { stackPos, html } items for HTML export/preview.
+function buildGlowsHTML(sec) {
+  const glows = sec.bgGlows || [];
+  if (!glows.length) return [];
+  const cw   = CANVAS_W;
+  const ch   = sec.height || 700;
+  const diag = Math.sqrt(cw * cw + ch * ch);
+  return glows.map(glow => {
+    const x  = Math.round((glow.x !== undefined ? glow.x : 0.5) * cw);
+    const y  = Math.round((glow.y !== undefined ? glow.y : 0.5) * ch);
+    const r  = Math.round(diag * Math.max(0.1, glow.area || 0.5));
+    const a  = Math.min(1, Math.max(0, glow.intensity || 0.6));
+    const a2 = (a * 0.4).toFixed(3);
+    const style = `position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle ${r}px at ${x}px ${y}px,rgba(255,200,50,${a.toFixed(3)}) 0%,rgba(255,180,30,${a2}) 50%,rgba(255,160,0,0) 100%)`;
+    return { stackPos: glow.stackPos || 0, html: `<div style="${style}"></div>` };
+  }).sort((a, b) => a.stackPos - b.stackPos);
+}
+
+// Interleave objectToHTML strings with glow overlay divs in correct z-order.
+// stackPos=0 → before all objects; stackPos=N → after the N-th object.
+function mergeGlowsIntoHTML(objsHtmlArr, glowItems) {
+  if (!glowItems.length) return objsHtmlArr;
+  const result = [];
+  let gi = 0;
+  while (gi < glowItems.length && glowItems[gi].stackPos <= 0) result.push(glowItems[gi++].html);
+  for (let i = 0; i < objsHtmlArr.length; i++) {
+    result.push(objsHtmlArr[i]);
+    while (gi < glowItems.length && glowItems[gi].stackPos === i + 1) result.push(glowItems[gi++].html);
+  }
+  while (gi < glowItems.length) result.push(glowItems[gi++].html);
+  return result;
+}
+
 // Build the CSS background string for a section, collecting any asset image
 // into the shared `images` array so the caller can copy files to disk.
 function buildBgStyleForFolder(sec, seenNames, images) {
@@ -1866,9 +2735,10 @@ async function previewHTML() {
     const seenNames = new Set();
 
     const sectionsHTML = sections.map(sec => {
-      const bgStyle  = buildBgStyleForFolder(sec, seenNames, images);
-      const objsHtml = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames, undefined, false)).join('\n');
-      return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;">\n${objsHtml}\n  </section>`;
+      const bgStyle     = buildBgStyleForFolder(sec, seenNames, images);
+      const objsHtmlArr = (sec.objects || []).map(o => objectToHTML(o, sec, usedFonts, images, seenNames, undefined, false));
+      const children    = mergeGlowsIntoHTML(objsHtmlArr, buildGlowsHTML(sec)).join('\n');
+      return `  <section class="bs" style="height:${sec.height}px;position:relative;${bgStyle}overflow:hidden;width:${CANVAS_W}px;">\n${children}\n  </section>`;
     }).join('\n\n');
 
     const totalHeight = sections.reduce((s, sec) => s + (sec.height || 600), 0) + sections.length * 12;
@@ -2093,7 +2963,8 @@ function bindMenuEvents() {
   api.onMenu('menu:save-as',   () => saveProject(true));
   api.onMenu('menu:export',       () => exportHTML());
   api.onMenu('menu:export-print', () => exportPrint());
-  api.onMenu('menu:export-pdf',   () => exportPDF());
+  api.onMenu('menu:export-pdf',         () => exportPDF());
+  api.onMenu('menu:export-digital-pdf', () => exportDigitalPDF());
   api.onMenu('menu:undo',      () => undo());
   api.onMenu('menu:redo',      () => redo());
   api.onMenu('menu:delete',    () => deleteSelected());
@@ -2125,6 +2996,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindKeyboard();
   bindMenuEvents();
   bindFontManager();
+  bindCropHandlers();
   document.getElementById('btn-add-section').addEventListener('click', addSection);
 
   // Try to resume: saved project → recovery snapshot → default template
