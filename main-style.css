@@ -175,14 +175,16 @@ body {
    PC / large tablet (â‰¥ 769px wide)
    Center a 728px column on the dark background,
    matching the brochure.html layout width.
-   Override min-height: 149vw â€” that formula is for
-   full-viewport-width elements; at 728px, 100vh is enough.
+   1085px = ceil(728 Ã— 3360/2256) â€” full portrait image height
+   at 728px container width under background-size:cover.
+   100vh wins on tall monitors; 1085px floor lets short
+   viewports scroll to see the full image.
    ============================== */
 
 @media (min-width: 769px) {
   .phone-page {
     max-width: 728px;
     margin: 0 auto;
-    min-height: 100vh;
+    min-height: max(100vh, 1085px);
   }
 }
