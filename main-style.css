@@ -18,13 +18,13 @@ body {
 
 /* Mobile poster layout */
 .phone-page {
-  position: relative;       /* anchors all absolute children */
+  position: absolute;       /* anchors all absolute children */
   width: 100%;
   min-height: 100vh;        /* full viewport height */
 
   background-image:
     linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.28)),
-    url("images/background.jpg");
+    url("images/background.png");
   background-size: cover;
   background-position: top center;
   background-repeat: no-repeat;
@@ -82,10 +82,10 @@ body {
 
 .button-group {
   position: absolute;
-  left: 62%;
-  top: 40%;
+  right: 8%;
+  top: 2%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 14px;
 }
 
@@ -151,19 +151,14 @@ body {
 
 @media screen and (orientation: landscape) {
   .phone-page {
-    min-height: 100vh;
-    background-position: center center;
+    width: 100%;
+    min-height: 320vh;
+    background-position: top center;
   }
 
   .page-title {
     top: 6%;
     font-size: 0.9em;
-  }
-
-  .button-group {
-    top: 30%;
-    left: 65%;
-    gap: 10px;
   }
 
   .event-button {
