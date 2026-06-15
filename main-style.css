@@ -36,30 +36,28 @@ body {
 
 
 /* ==============================
-   Top Bar
-   Buttons sit to the LEFT of the Instagram icon.
-   Move the whole unit by changing top / right here.
+   Button group and Instagram icon
+   Both are independently absolutely positioned inside .phone-page.
+   No shared flex wrapper â€” eliminates any wrapping between them.
+   Instagram sits at top-right; button-group sits to its left.
+   44px = 32px icon + 12px gap.
    ============================== */
 
-.top-bar {
+.button-group {
   position: absolute;
   top: 2%;
-  right: 4%;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 16px;
-}
-
-.button-group {
+  right: calc(4% + 44px);
   display: flex;
   flex-direction: row;
   gap: 12px;
+  align-items: center;
 }
 
 .instagram-link {
-  flex-shrink: 0;
-  line-height: 0;          /* removes extra inline gap below img */
+  position: absolute;
+  top: 2%;
+  right: 4%;
+  line-height: 0;
 }
 
 .instagram-link img {
@@ -141,10 +139,6 @@ body {
    ============================== */
 
 @media (max-width: 480px) {
-  .top-bar {
-    gap: 10px;
-  }
-
   .button-group {
     gap: 8px;
   }
@@ -163,6 +157,10 @@ body {
    ============================== */
 
 @media screen and (orientation: landscape) and (max-height: 500px) {
+  .button-group {
+    gap: 8px;
+  }
+
   .event-button {
     min-width: 110px;
     font-size: 12px;
