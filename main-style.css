@@ -134,8 +134,8 @@ body {
 
 @media (max-width: 360px) {
   .event-button {
-    min-width: 130px;
-    font-size: 12px;
+    min-width: 60px;
+    font-size: 10px;
     padding: 10px 14px;
   }
 
@@ -164,6 +164,6 @@ body {
   .event-button {
     font-size: 13px;
     padding: 10px 18px;
-    min-width: 150px;
+    min-width: 100px;
   }
 }
