@@ -168,8 +168,13 @@ body {
   }
 }
 
-@media screen and (orientation: landscape) and (max-height: 500px) {
+@media screen and (orientation: landscape) and (max-height: 430) {
   .button-group {
+    position: absolute;
     left: 64%;
+    top: 2%;
+    display: flex;
+    flex-direction: row;
+    gap: 14px;
   }
 }
