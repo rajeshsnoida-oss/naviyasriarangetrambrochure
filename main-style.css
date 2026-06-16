@@ -19,7 +19,7 @@ body {
 /* Mobile poster layout */
 .phone-page {
   position: relative;        /* anchors all absolute children */
-  width: 100%;
+  width: min(100vw, 430px);
   /* max() ensures page is always tall enough to show the full portrait background
      image (2256×3360px). 149vw = (3360/2256)×100vw — the scaled image height
      when cover fills the viewport width. Falls back to 100vh on portrait screens
