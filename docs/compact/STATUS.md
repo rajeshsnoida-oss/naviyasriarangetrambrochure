@@ -2,7 +2,7 @@
 
 **Active phase**: development
 **Last updated**: 2026-06-16
-**Last drift-check**: 2026-05-21 â€” mode: design â€” 0 resolved, 0 skipped
+**Last drift-check**: 2026-05-21 — mode: design — 0 resolved, 0 skipped
 
 ## Done
 

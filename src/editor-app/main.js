@@ -190,8 +190,8 @@ ipcMain.handle('fs:writeFile', async (_e, filePath, data) => {
 });
 
 // Write brochure.html + images/ to a target directory for GitHub Pages hosting.
-// PNGs wider than 900px (2Ã— the 450px canvas) are resized with nativeImage to
-// shrink AI-cutout files from 30â€“50 MB down to a few hundred KB. WebP/JPEG are
+// PNGs wider than 900px (2× the 450px canvas) are resized with nativeImage to
+// shrink AI-cutout files from 30–50 MB down to a few hundred KB. WebP/JPEG are
 // already compressed and copied as-is.
 ipcMain.handle('export:writeToRepo', async (_e, dir, html, assetNames) => {
   const MAX_W = 900;
@@ -231,7 +231,7 @@ ipcMain.handle('dialog:openImages', async () => {
 ipcMain.handle('dialog:exportDir', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
-    title: 'Export â€” choose target folder (brochure.html + images/ will be written here)',
+    title: 'Export — choose target folder (brochure.html + images/ will be written here)',
     buttonLabel: 'Export here',
   });
   return canceled ? null : filePaths[0];
