@@ -2082,7 +2082,7 @@ ${sectionsHTML}
 
     const assetRefs = images.filter(img => img.assetRef).map(img => img.name);
     await window.editorAPI.exportToRepo(destPath, html, assetRefs);
-    setStatus('Exported: index.html + images/ written to ' + destPath);
+    setStatus('Exported: brochure.html + images/ written to ' + destPath);
   } catch (e) {
     console.error('Export failed:', e);
     setStatus('Export failed: ' + (e && e.message ? e.message : String(e)));

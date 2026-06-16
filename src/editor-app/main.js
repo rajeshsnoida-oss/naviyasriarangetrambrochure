@@ -189,7 +189,7 @@ ipcMain.handle('fs:writeFile', async (_e, filePath, data) => {
   return true;
 });
 
-// Write index.html + images/ to a target directory for GitHub Pages hosting.
+// Write brochure.html + images/ to a target directory for GitHub Pages hosting.
 // PNGs wider than 900px (2× the 450px canvas) are resized with nativeImage to
 // shrink AI-cutout files from 30–50 MB down to a few hundred KB. WebP/JPEG are
 // already compressed and copied as-is.
@@ -197,7 +197,7 @@ ipcMain.handle('export:writeToRepo', async (_e, dir, html, assetNames) => {
   const MAX_W = 900;
   const imgDir = path.join(dir, 'images');
   fs.mkdirSync(imgDir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'index.html'), html, 'utf8');
+  fs.writeFileSync(path.join(dir, 'brochure.html'), html, 'utf8');
   const src = getAssetsDir();
   for (const name of (assetNames || [])) {
     const srcFile = path.join(src, name);
@@ -231,7 +231,7 @@ ipcMain.handle('dialog:openImages', async () => {
 ipcMain.handle('dialog:exportDir', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
-    title: 'Export — choose target folder (index.html + images/ will be written here)',
+    title: 'Export — choose target folder (brochure.html + images/ will be written here)',
     buttonLabel: 'Export here',
   });
   return canceled ? null : filePaths[0];
@@ -811,7 +811,7 @@ ipcMain.handle('preview:openFolder', async (_e, html, assetNames, dataUrlImages)
     const b64 = (img.dataUrl || '').split(',')[1];
     if (b64) fs.writeFileSync(path.join(imgDir, img.name), Buffer.from(b64, 'base64'));
   }
-  const htmlPath = path.join(tmpDir, 'index.html');
+  const htmlPath = path.join(tmpDir, 'brochure.html');
   fs.writeFileSync(htmlPath, html, 'utf8');
   await shell.openPath(htmlPath);
   return true;
