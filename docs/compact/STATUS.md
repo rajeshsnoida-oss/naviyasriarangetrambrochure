@@ -62,12 +62,15 @@
 - 2026-06-01 Editor: bgImage bleed fixed — switchSection afterLoad + restoreHistory now call canvas.setBackgroundImage(null, …) when sec.bgImage is falsy, clearing previous section's background image on navigation; D-050
 - 2026-06-12 Editor: Digital PDF export (sRGB, bleed-cropped) — cropToSafeArea() removes 0.25" bleed (75px @ 300 DPI) from each edge; exportDigitalPDF() renders at print DPI, crops to 5.50"×8.00" trim size, embeds as sRGB PNG via pdfkit; output brochure-digital.pdf; "Digital PDF" toolbar button + Ctrl+Shift+G menu; export:toPdf gains optional filename param; D-057 logged
 - 2026-06-12 Editor: HTML export bleed trim — section container clipped to safe area (728×(sec.height−66)px); inner div at full canvas size offset −33px on each axis carries bgStyle + all objects; responsive scale threshold 794→728px; D-058 logged
+- 2026-06-15 index.html / main-style.css: PC layout — .phone-page centered at max-width:728px on viewports ≥769px, matching brochure column width; min-height:max(100vh,1085px) ensures full portrait image visible and page scrollable on short viewports; D-059, D-060 logged
+- 2026-06-15 index.html / main-style.css: phone button layout — removed shared .top-bar flex wrapper; .button-group and .instagram-link given independent position:absolute placements (.button-group at right:calc(4%+44px), .instagram-link at right:4%); eliminates flex-wrap on mobile; D-061 logged
+- 2026-06-16 Editor: export HTML renamed index.html → brochure.html in export:writeToRepo handler, preview temp file, dialog title, and status-bar message — matches "Program Brochure" href in event landing page
 
 ## In progress
 
 - Test vector PDF export — verify text alignment, Tamil character rendering, and justify spacing in a PDF viewer
 - Test Digital PDF export — open brochure-digital.pdf, verify content is within 0.25" safe-area boundary and colors match screen
-- Test HTML export bleed trim — open exported index.html, verify 0.25" boundary is cropped, backgrounds fill correctly, no layout breaks
+- Test HTML export bleed trim — open exported brochure.html, verify 0.25" boundary is cropped, backgrounds fill correctly, no layout breaks
 
 ## Next
 
