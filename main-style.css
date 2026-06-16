@@ -157,6 +157,10 @@ body {
    ============================== */
 
 @media screen and (orientation: landscape) and (max-height: 500px) {
+   .phone-page {
+      width: 100%;
+   }
+
   .button-group {
     gap: 16px;
   }
@@ -181,6 +185,7 @@ body {
 
 @media (min-width: 769px) {
   .phone-page {
+    width: 100%;
     max-width: 728px;
     margin: 0 auto;
     min-height: max(100vh, 1085px);
