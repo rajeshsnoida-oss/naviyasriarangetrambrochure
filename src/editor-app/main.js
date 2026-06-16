@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell, clipboard, nativeImage } = require('electron');
+﻿const { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, shell, clipboard, nativeImage } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const os     = require('os');
@@ -12,8 +12,8 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 
 const VENDOR_ROOT = path.join(__dirname, '..', 'editor', 'vendor');
 
-// ── Asset directory tracking ──────────────────────────────────────────────────
-// null  = no project saved yet → use temp-assets in userData
+// â”€â”€ Asset directory tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// null  = no project saved yet â†’ use temp-assets in userData
 // path  = <project-dir>/<name>-assets/
 let projectAssetsDir = null;
 
@@ -33,7 +33,7 @@ function assetsPathFor(projectFilePath) {
   );
 }
 
-// ── Custom schemes ────────────────────────────────────────────────────────────
+// â”€â”€ Custom schemes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 protocol.registerSchemesAsPrivileged([
   { scheme: 'vendor', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true, stream: true } },
   { scheme: 'asset',  privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true } },
@@ -68,7 +68,7 @@ function createWindow() {
   buildMenu();
 }
 
-// ── vendor:// protocol — serves src/editor/vendor/<pkg>/<rest> ───────────────
+// â”€â”€ vendor:// protocol â€” serves src/editor/vendor/<pkg>/<rest> â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function registerVendorProtocol() {
   const MIME = {
     '.mjs':  'application/javascript',
@@ -99,7 +99,7 @@ function registerVendorProtocol() {
   });
 }
 
-// ── asset:// protocol — serves image assets from the project assets folder ────
+// â”€â”€ asset:// protocol â€” serves image assets from the project assets folder â”€â”€â”€â”€
 function registerAssetProtocol() {
   const MIME = {
     '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -110,7 +110,7 @@ function registerAssetProtocol() {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     try {
       const url  = new URL(request.url);
-      // asset://img_abc123.jpg → hostname = "img_abc123.jpg"
+      // asset://img_abc123.jpg â†’ hostname = "img_abc123.jpg"
       const name = decodeURIComponent(url.hostname);
       const file = path.join(getAssetsDir(), name);
       if (!fs.existsSync(file)) return new Response('Not found: ' + name, { status: 404, headers: CORS });
@@ -129,14 +129,14 @@ function buildMenu() {
       label: 'File',
       submenu: [
         { label: 'New Project',  accelerator: 'CmdOrCtrl+N', click: () => mainWindow.webContents.send('menu:new') },
-        { label: 'Open…',        accelerator: 'CmdOrCtrl+O', click: openProject },
+        { label: 'Openâ€¦',        accelerator: 'CmdOrCtrl+O', click: openProject },
         { label: 'Save',         accelerator: 'CmdOrCtrl+S', click: () => mainWindow.webContents.send('menu:save') },
-        { label: 'Save As…',     accelerator: 'CmdOrCtrl+Shift+S', click: saveProjectAs },
+        { label: 'Save Asâ€¦',     accelerator: 'CmdOrCtrl+Shift+S', click: saveProjectAs },
         { type: 'separator' },
-        { label: 'Export to HTML/CSS…', accelerator: 'CmdOrCtrl+E',       click: () => mainWindow.webContents.send('menu:export') },
-        { label: 'Export for Print (PNG)…', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow.webContents.send('menu:export-print') },
-        { label: 'Export PDF (CMYK)…',      accelerator: 'CmdOrCtrl+Shift+D', click: () => mainWindow.webContents.send('menu:export-pdf') },
-        { label: 'Export Digital PDF (sRGB)…', accelerator: 'CmdOrCtrl+Shift+G', click: () => mainWindow.webContents.send('menu:export-digital-pdf') },
+        { label: 'Export to HTML/CSSâ€¦', accelerator: 'CmdOrCtrl+E',       click: () => mainWindow.webContents.send('menu:export') },
+        { label: 'Export for Print (PNG)â€¦', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow.webContents.send('menu:export-print') },
+        { label: 'Export PDF (CMYK)â€¦',      accelerator: 'CmdOrCtrl+Shift+D', click: () => mainWindow.webContents.send('menu:export-pdf') },
+        { label: 'Export Digital PDF (sRGB)â€¦', accelerator: 'CmdOrCtrl+Shift+G', click: () => mainWindow.webContents.send('menu:export-digital-pdf') },
         { type: 'separator' },
         { role: 'quit' },
       ],
@@ -165,7 +165,7 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// ── IPC handlers ─────────────────────────────────────────────────────────────
+// â”€â”€ IPC handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 ipcMain.handle('dialog:openProject', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
@@ -218,7 +218,7 @@ ipcMain.handle('export:writeToRepo', async (_e, dir, html, assetNames) => {
   return true;
 });
 
-// Return source paths only — no base64. The renderer calls asset:import to copy.
+// Return source paths only â€” no base64. The renderer calls asset:import to copy.
 ipcMain.handle('dialog:openImages', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'] }],
@@ -248,7 +248,7 @@ ipcMain.handle('export:savePrintImages', async (_e, dir, images) => {
 });
 
 // Assemble a print-ready PDF from rendered PNG sections.
-// PNGs are embedded as sRGB via pdfkit's native image support — colors match
+// PNGs are embedded as sRGB via pdfkit's native image support â€” colors match
 // the screen exactly. Print shops' RIPs convert to press CMYK with ICC
 // profiles, which is more accurate than a profile-less software conversion.
 ipcMain.handle('export:toPdf', async (_e, dir, images, spec) => {
@@ -283,7 +283,7 @@ ipcMain.handle('export:toPdf', async (_e, dir, images, spec) => {
   });
 });
 
-// ── CMYK PDF helpers ──────────────────────────────────────────────────────────
+// â”€â”€ CMYK PDF helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function httpGet(url, headers, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
@@ -316,7 +316,7 @@ const SYSTEM_FONT_MAP = {
 
 // Download a Google Font as TTF/OTF and cache it. Returns Buffer or null on failure.
 // targetCodepoint (optional): when set, selects the @font-face block whose unicode-range
-// covers that codepoint — required for non-Latin fonts (e.g. Noto Sans Tamil U+0B89)
+// covers that codepoint â€” required for non-Latin fonts (e.g. Noto Sans Tamil U+0B89)
 // because Google Fonts CSS splits the font into per-script subsets; taking the first URL
 // blindly gives the Latin block which has no Tamil glyphs.
 async function fetchGoogleFont(family, weight, italic, targetCodepoint) {
@@ -335,7 +335,7 @@ async function fetchGoogleFont(family, weight, italic, targetCodepoint) {
       const urlM = block.match(TTF_RE);
       if (!urlM) continue;
       if (!firstUrl) firstUrl = urlM[1];
-      if (!cp) return firstUrl; // No target — first URL wins
+      if (!cp) return firstUrl; // No target â€” first URL wins
       const rangeM = block.match(/unicode-range\s*:\s*([^;]+)/i);
       if (!rangeM) return urlM[1]; // No range constraint = full font
       const covered = rangeM[1].split(',').some(r => {
@@ -352,7 +352,7 @@ async function fetchGoogleFont(family, weight, italic, targetCodepoint) {
   }
 
   try {
-    // Attempt 1: v1 API — returns full TTF for most older fonts, no subsetting.
+    // Attempt 1: v1 API â€” returns full TTF for most older fonts, no subsetting.
     const styleStr = italic ? `${weight}italic` : weight;
     const v1Css = (await httpGet(
       `https://fonts.googleapis.com/css?family=${encodeURIComponent(family)}:${styleStr}`,
@@ -379,7 +379,7 @@ async function fetchGoogleFont(family, weight, italic, targetCodepoint) {
   } catch { return null; }
 }
 
-// Convert hex color to CMYK [c,m,y,k] (0–1 range, float).
+// Convert hex color to CMYK [c,m,y,k] (0â€“1 range, float).
 function hexToCmyk(hex) {
   const c = parseInt(hex.slice(1), 16);
   const r = ((c >> 16) & 0xff) / 255;
@@ -445,7 +445,7 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
   const PT_PER_IN = 72;
   const pageW = wIn * PT_PER_IN;
   const pageH = hIn * PT_PER_IN;
-  const scale = pageW / canvasW; // canvas pixels → PDF points
+  const scale = pageW / canvasW; // canvas pixels â†’ PDF points
 
   fs.mkdirSync(dir, { recursive: true });
   const destPath = path.join(dir, 'brochure-print.pdf');
@@ -457,7 +457,7 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
   });
 
   // Pre-load fonts into pdfkit (register each family/style combination found).
-  const registeredFonts = new Map(); // key → pdfkit font name
+  const registeredFonts = new Map(); // key â†’ pdfkit font name
   const weights = ['400', '700'];
   plog(`[PDF fonts] families to load: ${JSON.stringify(googleFontsList)}`);
   for (const family of (googleFontsList || [])) {
@@ -474,19 +474,19 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
           registeredFonts.set(key, regName);
           plog(`[PDF fonts] OK: ${regName} (${buf.length} bytes)`);
         } catch (e) {
-          perr(`[PDF fonts] REGISTER ERROR: ${regName} — ${e && e.message}`);
+          perr(`[PDF fonts] REGISTER ERROR: ${regName} â€” ${e && e.message}`);
         }
       }
     }
   }
-  plog(`[PDF fonts] done — ${registeredFonts.size} variants registered, starting page render…`);
+  plog(`[PDF fonts] done â€” ${registeredFonts.size} variants registered, starting page renderâ€¦`);
 
-  // Pre-register Noto Sans Tamil if any text object contains Tamil Unicode characters (U+0B80–U+0BFF).
-  const TAMIL_RE = /[஀-௿]/;
+  // Pre-register Noto Sans Tamil if any text object contains Tamil Unicode characters (U+0B80â€“U+0BFF).
+  const TAMIL_RE = /[à®€-à¯¿]/;
   let tamilFontName = null;
   const hasTamilText = (pdfSections || []).some(s => (s.textData || []).some(t => TAMIL_RE.test(t.text || '')));
   if (hasTamilText) {
-    plog(`[PDF fonts] Tamil text detected — fetching Noto Sans Tamil`);
+    plog(`[PDF fonts] Tamil text detected â€” fetching Noto Sans Tamil`);
     try {
       const tamilBuf = await fetchGoogleFont('Noto Sans Tamil', '400', false, 0x0B89);
       if (tamilBuf) {
@@ -494,7 +494,7 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
         tamilFontName = 'NotoSansTamil';
         plog(`[PDF fonts] Noto Sans Tamil registered (${tamilBuf.length} bytes)`);
       } else {
-        pwarn(`[PDF fonts] Noto Sans Tamil fetch returned null — Tamil glyphs will be missing`);
+        pwarn(`[PDF fonts] Noto Sans Tamil fetch returned null â€” Tamil glyphs will be missing`);
       }
     } catch (e) {
       pwarn(`[PDF fonts] Noto Sans Tamil fetch failed: ${e && e.message}`);
@@ -540,11 +540,11 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
       }
     }
 
-    plog(`[PDF main] page — textData count: ${(textData || []).length}`);
+    plog(`[PDF main] page â€” textData count: ${(textData || []).length}`);
     for (const t of (textData || [])) {
       const x  = t.left * scale;
-      // Clamp to page top — canvas objects positioned ≤1px above the section render
-      // at slightly negative PDF y (e.g. y≈-0.27 pts), which pdfkit clips silently.
+      // Clamp to page top â€” canvas objects positioned â‰¤1px above the section render
+      // at slightly negative PDF y (e.g. yâ‰ˆ-0.27 pts), which pdfkit clips silently.
       const y  = Math.max(0, t.top * scale);
       const fs = t.fontSize * scale;
 
@@ -567,7 +567,7 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
       let   alignOpt  = t.textAlign || 'left';
       if (alignOpt === 'justify-left') alignOpt = 'justify';
 
-      plog(`[PDF main]     → font=${fontName} color=${fillColor} w=${textW.toFixed(1)}`);
+      plog(`[PDF main]     â†’ font=${fontName} color=${fillColor} w=${textW.toFixed(1)}`);
 
       try {
         doc.save();
@@ -596,18 +596,18 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
               // (e.g. "\n Para two") which pdfkit renders as visible space characters.
               const line  = lines[li].trim();
               const lineY = y + li * lineH;
-              if (lineY >= pageH) break; // Beyond page — skip; never let pdfkit auto-add pages.
-              if (!line) { rendered++; continue; } // Empty paragraph line — occupy the slot, skip render.
+              if (lineY >= pageH) break; // Beyond page â€” skip; never let pdfkit auto-add pages.
+              if (!line) { rendered++; continue; } // Empty paragraph line â€” occupy the slot, skip render.
 
               // isParaEnd: true for the last wrapped line of each paragraph and for the
-              // very last line of the text box. These must NOT be justified — a para-end
+              // very last line of the text box. These must NOT be justified â€” a para-end
               // line should stay left-aligned so it doesn't stretch to fill the width.
               const isParaEnd = t.isParaEnd ? t.isParaEnd[li] : (li === lines.length - 1);
 
               if (isJust && !isParaEnd && line.includes(' ')) {
                 // Non-para-end justify: distribute surplus width across word gaps.
                 // doc.widthOfString uses fontkit metrics; small deviations from Canvas2D
-                // are acceptable — positions are driven by explicit lineY, not re-flow.
+                // are acceptable â€” positions are driven by explicit lineY, not re-flow.
                 const naturalW    = doc.widthOfString(line);
                 const wordGaps    = line.split(' ').length - 1;
                 const wordSpacing = wordGaps > 0 ? Math.max(0, (textW - naturalW) / wordGaps) : 0;
@@ -619,13 +619,13 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
               }
               rendered++;
             }
-            plog(`[PDF main]     ✓ rendered ${rendered}/${lines.length} line(s)`);
+            plog(`[PDF main]     âœ“ rendered ${rendered}/${lines.length} line(s)`);
           } else {
             // Fallback: pdfkit re-flow when textLines unavailable (should not happen
-            // in normal operation — live Fabric objects always have textLines).
+            // in normal operation â€” live Fabric objects always have textLines).
             const remainingH = Math.max(1, pageH - y);
             doc.text(t.text, x, y, { width: textW, height: remainingH, align: alignOpt, lineBreak: true });
-            plog(`[PDF main]     ✓ rendered (reflow fallback)`);
+            plog(`[PDF main]     âœ“ rendered (reflow fallback)`);
           }
         } else {
           pwarn(`[PDF main]     SKIP empty text`);
@@ -645,12 +645,12 @@ ipcMain.handle('export:toPdfVector', async (_e, dir, pdfSections, googleFontsLis
   });
 });
 
-// Two-up PNG: sections 4 + 5 side-by-side on 12"×8.5" landscape (3600×2550 @ 300 DPI).
-// Each slot is 1800×2550px = exactly 6"×8.5" — matches the editor's per-section canvas.
-// No CMYK conversion — original RGB colors are preserved exactly.
+// Two-up PNG: sections 4 + 5 side-by-side on 12"Ã—8.5" landscape (3600Ã—2550 @ 300 DPI).
+// Each slot is 1800Ã—2550px = exactly 6"Ã—8.5" â€” matches the editor's per-section canvas.
+// No CMYK conversion â€” original RGB colors are preserved exactly.
 ipcMain.handle('export:twoUp', async (_e, dir, images) => {
   const OUT_W = 3600, OUT_H = 2550;
-  const halfW = OUT_W >> 1;  // 1800 px per slot (6" × 300 DPI)
+  const halfW = OUT_W >> 1;  // 1800 px per slot (6" Ã— 300 DPI)
 
   // White background in BGRA (nativeImage.createFromBitmap requires BGRA)
   const outBuf = Buffer.alloc(OUT_W * OUT_H * 4, 255);
@@ -704,7 +704,7 @@ ipcMain.handle('dialog:copyImages', async (_e, destDir, images) => {
   return true;
 });
 
-// ── Asset IPC ─────────────────────────────────────────────────────────────────
+// â”€â”€ Asset IPC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Copy an image file from anywhere on disk into the active assets folder.
 ipcMain.handle('asset:import', async (_e, srcPath) => {
@@ -827,3 +827,4 @@ app.whenReady().then(() => {
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
