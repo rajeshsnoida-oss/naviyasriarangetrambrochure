@@ -172,6 +172,11 @@ body {
   }
 }
 
+@media (min-width: 480px) {
+  .phone-page {
+    width: 100%;
+  }
+}
 
 /* ==============================
    PC / large tablet (≥ 769px wide)
