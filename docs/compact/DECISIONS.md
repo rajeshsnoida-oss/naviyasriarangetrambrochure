@@ -848,6 +848,69 @@
   medium-width viewports. previewHTML is intentionally unchanged (shows full bleed
   for safe-area reference).
 
+## D-059 — index.html PC layout: max-width 728px centered column
+
+- **Date:** 2026-06-15
+- **Status:** decided
+- **Context:** On PC, index.html (event landing/poster page) rendered as a
+  full-viewport background image. brochure.html renders as a 728px column
+  centered on a dark `#111` background. User requested the index page adopt
+  the same layout on desktop so both pages are visually consistent.
+- **Decision:** On viewports ≥769px, constrain `.phone-page` to
+  `max-width:728px` with `margin:0 auto`. The body's existing `background:#111`
+  provides the dark surround. Mobile (≤768px) unaffected.
+- **Why 728px:** Matches the brochure section width (safe area after 0.25" bleed
+  trim from D-058). Consistent column width means both pages share the same
+  visual "frame" on desktop.
+- **Why not full-viewport on PC:** Would show the portrait background image
+  cropped by the landscape viewport; the 728px column instead scales the image
+  to fill height with natural portrait proportions.
+- **Consequences:** Desktop users see a phone-sized column on dark background.
+  min-height formula must be updated if the background image is replaced
+  (see D-060).
+
+## D-060 — index.html PC min-height: max(100vh, 1085px)
+
+- **Date:** 2026-06-15
+- **Status:** decided
+- **Context:** With the 728px column (D-059), `min-height:100vh` caused the
+  page to be exactly viewport-height tall on short monitors (e.g. 768px). The
+  portrait background image (2256×3360px) at 728px width scales to ~1084px
+  under `background-size:cover` — taller than a 768px viewport. No scrollbar
+  appeared; the bottom of the poster was unreachable.
+- **Decision:** `min-height:max(100vh, 1085px)` where
+  1085px = ceil(728 × 3360/2256). Tall monitors (≥1085px) fill the viewport;
+  short ones get a scrollable page.
+- **Why not the mobile formula (149vw):** On a 1920px viewport, 149vw = 2861px —
+  far taller than needed. The fixed 1085px floor is the exact image height at
+  the fixed 728px column width; no viewport-relative formula is required.
+- **Consequences:** If the background image aspect ratio changes, 1085px must
+  be recalculated: `ceil(728 × image_height / image_width)`.
+
+## D-061 — index.html button layout: independent position:absolute over shared flex wrapper
+
+- **Date:** 2026-06-15
+- **Status:** decided
+- **Context:** `.top-bar` was a shared flex container holding `.button-group`
+  and `.instagram-link` (`position:absolute` on the container, flex row inside).
+  On some phones, the instagram icon appeared displaced to the top-left and the
+  event buttons were pushed to a second line. Root cause: browser-specific flex
+  container width computation under `overflow-x:hidden` on the body, allowing
+  unexpected item wrapping inside the absolute container.
+- **Decision:** Remove `.top-bar` flex wrapper entirely. Position `.button-group`
+  and `.instagram-link` as independent `position:absolute` children of
+  `.phone-page`:
+  - `.instagram-link { right: 4%; top: 2%; }`
+  - `.button-group   { right: calc(4% + 44px); top: 2%; }` (44 = 32px icon + 12px gap)
+- **Why not `flex-wrap:nowrap` + `width:max-content`:** Defensive properties on
+  the existing container don't eliminate the browser-specific quirk — the
+  underlying width computation could still surface on untested devices.
+  Independent absolute positioning removes the shared container entirely;
+  wrapping between the two groups is structurally impossible.
+- **Consequences:** The two elements are visually coupled only by their
+  right-edge offsets. If the instagram icon size changes from 32px, the 44px
+  value in `calc(4% + 44px)` must be updated (44 = icon_width + 12px gap).
+
 <!--
 Template for new entries:
 

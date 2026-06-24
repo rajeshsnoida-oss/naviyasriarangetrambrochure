@@ -1,5 +1,5 @@
-﻿'use strict';
-/* â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+'use strict';
+/* ── Constants ──────────────────────────────────────────────────────────── */
 const CANVAS_W   = 794;
 const CANVAS_JSON_PROPS = [
   'name','fontFamily','fontWeight','fontStyle','underline','fill',
@@ -12,9 +12,9 @@ const ZOOM_MIN   = 0.2;
 const ZOOM_MAX   = 3.0;
 const HISTORY_MAX = 80;
 
-/* â”€â”€ Font catalogue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Font catalogue ─────────────────────────────────────────────────────── */
 const FONTS = [
-  // â”€â”€ Classical / Serif â”€â”€
+  // ── Classical / Serif ──
   { name: 'Playfair Display',    cat: 'Serif' },
   { name: 'Cormorant Garamond',  cat: 'Serif' },
   { name: 'EB Garamond',         cat: 'Serif' },
@@ -23,7 +23,7 @@ const FONTS = [
   { name: 'Lora',                cat: 'Serif' },
   { name: 'Crimson Text',        cat: 'Serif' },
   { name: 'Cinzel',              cat: 'Serif' },
-  // â”€â”€ Modern / Sans â”€â”€
+  // ── Modern / Sans ──
   { name: 'Lato',                cat: 'Sans' },
   { name: 'Montserrat',          cat: 'Sans' },
   { name: 'Raleway',             cat: 'Sans' },
@@ -32,13 +32,13 @@ const FONTS = [
   { name: 'Josefin Sans',        cat: 'Sans' },
   { name: 'Nunito',              cat: 'Sans' },
   { name: 'Quicksand',           cat: 'Sans' },
-  // â”€â”€ Script / Decorative â”€â”€
+  // ── Script / Decorative ──
   { name: 'Dancing Script',      cat: 'Script' },
   { name: 'Great Vibes',         cat: 'Script' },
   { name: 'Sacramento',          cat: 'Script' },
   { name: 'Pacifico',            cat: 'Decorative' },
   { name: 'Lobster',             cat: 'Decorative' },
-  // â”€â”€ System â”€â”€
+  // ── System ──
   { name: 'Georgia',             cat: 'System' },
   { name: 'Times New Roman',     cat: 'System' },
   { name: 'Arial',               cat: 'System' },
@@ -49,8 +49,8 @@ const FONTS = [
 
 const GOOGLE_FONTS = new Set(FONTS.filter(f => f.cat !== 'System').map(f => f.name));
 
-/* â”€â”€ Custom / downloaded fonts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-let customFonts = []; // [{name, cat}] â€” persisted in settings.customFonts
+/* ── Custom / downloaded fonts ──────────────────────────────────────────── */
+let customFonts = []; // [{name, cat}] — persisted in settings.customFonts
 
 function injectGoogleFont(name) {
   const id = 'gf-' + name.replace(/\s+/g, '-').toLowerCase();
@@ -92,7 +92,7 @@ function renderFontList() {
     `<div class="fm-entry">
        <span class="fm-entry-name" style="font-family:'${f.name}',sans-serif">${f.name}</span>
        <span class="fm-cat-badge">${f.cat}</span>
-       <button class="fm-remove" data-name="${f.name}" title="Remove">âœ•</button>
+       <button class="fm-remove" data-name="${f.name}" title="Remove">✕</button>
      </div>`
   ).join('');
   el.querySelectorAll('.fm-remove').forEach(btn =>
@@ -151,7 +151,7 @@ function bindFontManager() {
     const name = document.getElementById('fm-name').value.trim();
     if (!name) return;
     const btn = document.getElementById('fm-load');
-    btn.textContent = 'â€¦';
+    btn.textContent = '…';
     btn.disabled = true;
     await loadFontPreview(name);
     btn.textContent = 'Load';
@@ -179,7 +179,7 @@ function bindFontManager() {
   });
 }
 
-/* â”€â”€ Shadow presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Shadow presets ─────────────────────────────────────────────────────── */
 const SHADOW_PRESETS = {
   drop:        { color: 'rgba(0,0,0,0.5)',       blur: 6,  offsetX: 3,  offsetY: 3  },
   soft:        { color: 'rgba(0,0,0,0.3)',       blur: 14, offsetX: 0,  offsetY: 5  },
@@ -187,7 +187,7 @@ const SHADOW_PRESETS = {
   'glow-white':{ color: 'rgba(255,255,255,0.9)', blur: 20, offsetX: 0,  offsetY: 0  },
 };
 
-/* â”€â”€ Background helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Background helpers ─────────────────────────────────────────────────── */
 function makeTextureSVG(type, fg, bg) {
   const enc = s => encodeURIComponent(s);
   const svgs = {
@@ -257,7 +257,7 @@ const DEFAULT_SECTIONS = [
   { label: 'Back Cover',       height: 700, bg: '#5a0a2e' },
 ];
 
-/* â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── State ──────────────────────────────────────────────────────────────── */
 let sections    = [];
 let activeSec   = -1;
 let canvas      = null;
@@ -275,7 +275,7 @@ let _suppressHistoryPush = false; // true while applyGlow/applyGlitter are mutat
 let _glowDrag  = null; // { glowId } while user is dragging a glow handle
 let _cropState = null; // { obj, scale, imgW, imgH, dispW, dispH, cropX, cropY, cropW, cropH }
 
-/* â”€â”€ Text style presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Text style presets ─────────────────────────────────────────────────── */
 const DEFAULT_TEXT_STYLES = [
   { id: 'ts_1', name: 'Title',    fontFamily: 'Playfair Display',   fontSize: 48, fontWeight: 'bold',   fontStyle: 'normal', color: '#ffffff', textAlign: 'center' },
   { id: 'ts_2', name: 'Subtitle', fontFamily: 'Cormorant Garamond', fontSize: 28, fontWeight: 'normal', fontStyle: 'italic', color: '#c9a84c', textAlign: 'center' },
@@ -285,7 +285,7 @@ const DEFAULT_TEXT_STYLES = [
 ];
 let textStyles = DEFAULT_TEXT_STYLES.map(s => ({ ...s }));
 
-/* â”€â”€ Font picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Font picker ────────────────────────────────────────────────────────── */
 function buildFontPicker() {
   const sel = document.getElementById('prop-font-family');
   sel.innerHTML = '';
@@ -305,16 +305,16 @@ function buildFontPicker() {
   }
 }
 
-/* â”€â”€ Fabric canvas init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Fabric canvas init ─────────────────────────────────────────────────── */
 // Disable per-object bitmap caches. Without this, Fabric builds each object's
-// texture at its natural size and stretches it at non-1Ã— zoom, causing blurry
-// text. Disabling caching makes Fabric redraw every object directly each frame â€”
-// fine for a brochure with â‰¤50 objects.
+// texture at its natural size and stretches it at non-1× zoom, causing blurry
+// text. Disabling caching makes Fabric redraw every object directly each frame —
+// fine for a brochure with ≤50 objects.
 fabric.Object.prototype.objectCaching = false;
 
 // Patch Textbox.initDimensions to apply CSS-based word-spacing after Fabric's
 // own enlargeSpaces() runs. enlargeSpaces() uses Canvas2D font metrics (no
-// ligatures) â†’ near-zero surplus â†’ invisible justification.  The CSS DOM
+// ligatures) → near-zero surplus → invisible justification.  The CSS DOM
 // measurement correctly accounts for ligatures, giving visible word-spacing
 // that matches what text-align:justify produces in the HTML export.
 (function patchTextboxJustification() {
@@ -327,7 +327,7 @@ fabric.Object.prototype.objectCaching = false;
   };
 })();
 
-// Grayscale via ctx.filter â€” avoids the filter pipeline (which needs getImageData
+// Grayscale via ctx.filter — avoids the filter pipeline (which needs getImageData
 // and fails on asset:// images due to canvas taint). ctx.save/restore brackets the
 // filter so it is automatically cleared after the image is drawn.
 (function patchGrayscaleRender() {
@@ -346,7 +346,7 @@ fabric.Object.prototype.objectCaching = false;
 
 function initCanvas() {
   // Fabric's default NUM_FRACTION_DIGITS=2 rounds scaleX/scaleY to 2 d.p. on toJSON,
-  // which discards small resize changes (e.g. 0.1136 â†’ 0.11) causing scale to revert
+  // which discards small resize changes (e.g. 0.1136 → 0.11) causing scale to revert
   // on every section switch. 4 d.p. is sub-pixel precision for any realistic canvas scale.
   fabric.Object.NUM_FRACTION_DIGITS = 4;
 
@@ -369,9 +369,9 @@ function initCanvas() {
     onCanvasChange();
   });
 
-  // â”€â”€ Glow drag â€” custom hit test so z-order doesn't matter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Glow drag — custom hit test so z-order doesn't matter ──────────────
   // Handles are non-evented visual markers; drag is detected here via proximity.
-  const GLOW_HIT_R = 20; // px â€” click radius that activates glow drag
+  const GLOW_HIT_R = 20; // px — click radius that activates glow drag
   canvas.on('mouse:down', e => {
     if (activeSec < 0) return;
     const sec = sections[activeSec];
@@ -395,7 +395,7 @@ function initCanvas() {
     }
   });
   canvas.on('mouse:move', e => {
-    // Hover cursor â€” show 'move' when near a glow handle (no drag in progress).
+    // Hover cursor — show 'move' when near a glow handle (no drag in progress).
     if (!_glowDrag && activeSec >= 0) {
       const sec = sections[activeSec];
       const glows = sec.bgGlows || [];
@@ -446,7 +446,7 @@ function initCanvas() {
   canvas.on('object:removed',     onCanvasChange);
 }
 
-/* â”€â”€ Section list UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Section list UI ────────────────────────────────────────────────────── */
 function renderSectionList() {
   const ul = document.getElementById('section-list');
   ul.innerHTML = '';
@@ -456,7 +456,7 @@ function renderSectionList() {
 
     const handle = document.createElement('span');
     handle.className = 'section-drag-handle';
-    handle.textContent = 'â ¿';
+    handle.textContent = '⠿';
     handle.draggable = true;
     handle.addEventListener('dragstart', e => {
       e.dataTransfer.setData('text/plain', String(i));
@@ -469,14 +469,14 @@ function renderSectionList() {
 
     const btnUp = document.createElement('button');
     btnUp.className = 'section-move-btn';
-    btnUp.textContent = 'â–²';
+    btnUp.textContent = '▲';
     btnUp.title = 'Move up';
     btnUp.disabled = i === 0;
     btnUp.addEventListener('click', e => { e.stopPropagation(); moveSectionTo(i, i - 1); });
 
     const btnDown = document.createElement('button');
     btnDown.className = 'section-move-btn';
-    btnDown.textContent = 'â–¼';
+    btnDown.textContent = '▼';
     btnDown.title = 'Move down';
     btnDown.disabled = i === sections.length - 1;
     btnDown.addEventListener('click', e => { e.stopPropagation(); moveSectionTo(i, i + 1); });
@@ -512,7 +512,7 @@ function moveSectionTo(from, to) {
   markDirty();
 }
 
-/* â”€â”€ Background propagation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Background propagation ─────────────────────────────────────────────── */
 function bgSettingsFrom(src) {
   return {
     bgType: src.bgType || 'solid', bg: src.bg || '#ffffff',
@@ -545,7 +545,7 @@ function propagateBgToAll(sourceSec) {
   markDirty();
 }
 
-/* â”€â”€ Canvas background image â€” match CSS background-size semantics â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Canvas background image — match CSS background-size semantics ─────── */
 function applyBgImageToCanvas(img, sec, targetCanvas, callback) {
   const W = CANVAS_W, H = sec.height;
   const bgSize = sec.bgSize || 'cover';
@@ -570,7 +570,7 @@ function applyBgImageToCanvas(img, sec, targetCanvas, callback) {
   cv.setBackgroundImage(img, cb, { scaleX, scaleY, left, top, originX: 'left', originY: 'top' });
 }
 
-/* â”€â”€ Canvas background application â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Canvas background application ─────────────────────────────────────── */
 function applyCanvasBg(sec) {
   const type = sec.bgType || 'solid';
   if (type === 'linear' || type === 'radial') {
@@ -588,7 +588,7 @@ function applyCanvasBg(sec) {
   }
 }
 
-/* â”€â”€ Golden glow overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Golden glow overlay ────────────────────────────────────────────────── */
 // Renders each glow in sec.bgGlows as a radial-gradient fabric.Image (visual)
 // plus a small draggable fabric.Circle handle (main canvas only, not during export).
 // All glow objects are tagged _isGlow:true and filtered from sec.objects snapshots.
@@ -627,7 +627,7 @@ function applyGlow(sec, fc) {
     const ch = sec.height || 700;
 
     // Place each glow at its stackPos relative to user-content objects.
-    // stackPos=0 â†’ behind all content; stackPos=1 â†’ above first content obj; etc.
+    // stackPos=0 → behind all content; stackPos=1 → above first content obj; etc.
     // Glows are inserted in ascending stackPos order so earlier insertions don't
     // shift the anchor index for later ones.
     const sortedGlows = [...glows].sort((a, b) => (a.stackPos || 0) - (b.stackPos || 0));
@@ -660,7 +660,7 @@ function applyGlow(sec, fc) {
   }
 }
 
-/* â”€â”€ Glitter / sun-rays overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Glitter / sun-rays overlay ─────────────────────────────────────────── */
 // Draws alternating wide/narrow radial rays for every glow in sec.bgGlows onto
 // one off-screen canvas, then places the result as a fabric.Image just above the
 // glow layer. Fixed LCG seed keeps ray layout stable across re-renders.
@@ -735,7 +735,7 @@ function applyGlitter(sec, fc) {
   }
 }
 
-/* â”€â”€ CSS-accurate justification for canvas text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── CSS-accurate justification for canvas text ─────────────────────────── */
 function applyCSSJustification(obj) {
   const nLines = (obj._textLines || []).length;
   if (nLines <= 1) return; // single-line: Fabric's justify-left rightly left-aligns it
@@ -751,7 +751,7 @@ function applyCSSJustification(obj) {
     if (spaces.length === 0) continue;
 
     // Reset __charBounds[a] to natural Canvas2D widths; measureLine returns { width }
-    // which is the sum of those charBounds â€” the true Canvas2D line width.
+    // which is the sum of those charBounds — the true Canvas2D line width.
     // Using CSS-measured width for surplus overshoots because CSS measures narrower
     // (ligatures collapse glyphs) while charBounds are Canvas2D-based, causing the
     // last character to overflow. Using the Canvas2D width keeps charBounds exact.
@@ -779,7 +779,7 @@ function applyCSSJustification(obj) {
   }
 }
 
-/* â”€â”€ Switch active section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Switch active section ──────────────────────────────────────────────── */
 function switchSection(idx) {
   if (idx === activeSec) return;
   clearTimeout(_recoveryTimer); // cancel pending recovery save before navigating away
@@ -792,7 +792,7 @@ function switchSection(idx) {
   const _host = document.getElementById('canvas-host');
   if (_host) { _host.scrollTop = 0; _host.scrollLeft = 0; }
 
-  // loadFromJSON clears backgroundColor â€” applyCanvasBg must run AFTER it completes.
+  // loadFromJSON clears backgroundColor — applyCanvasBg must run AFTER it completes.
   const afterLoad = () => {
     applyCanvasBg(sec);
     if (sec.bgImage) {
@@ -806,7 +806,7 @@ function switchSection(idx) {
     applyGlow(sec);
     applyGlitter(sec);
     // Re-render once the section's web fonts are confirmed loaded.
-    // document.fonts.ready is unreliable for lazily-loaded @font-face â€” it resolves
+    // document.fonts.ready is unreliable for lazily-loaded @font-face — it resolves
     // immediately if nothing is actively downloading. Use explicit per-font loads.
     const sectionFonts = new Set();
     canvas.getObjects().forEach(obj => {
@@ -836,11 +836,11 @@ function switchSection(idx) {
   if (sec.objects && sec.objects.length) {
     _sectionLoading++;
     // Use enlivenObjects instead of loadFromJSON so that canvas.clear() is never
-    // called internally by Fabric â€” the gen-check runs before any canvas mutation,
+    // called internally by Fabric — the gen-check runs before any canvas mutation,
     // eliminating the race where a stale callback fires object:removed on the live canvas.
     fabric.util.enlivenObjects(sec.objects, (enlivenedObjects) => {
       _sectionLoading = Math.max(0, _sectionLoading - 1);
-      if (gen !== _sectionGen) return; // stale switch â€” discard; canvas already cleared above
+      if (gen !== _sectionGen) return; // stale switch — discard; canvas already cleared above
       const prev = canvas.renderOnAddRemove;
       canvas.renderOnAddRemove = false;
       enlivenedObjects.forEach(obj => canvas.add(obj));
@@ -871,7 +871,7 @@ function saveCurrentSectionObjects() {
 // Use for explicit snapshots only (save / preview / export / section switch).
 // Calls discardActiveObject() once so Fabric runs _restoreObjectsState() and
 // converts any group-relative coords back to absolute before serialising.
-// Do NOT call this from onCanvasChange â€” the repeated qrDecompose accumulates
+// Do NOT call this from onCanvasChange — the repeated qrDecompose accumulates
 // floating-point drift that visibly resizes objects.
 function snapshotCurrentSection() {
   if (activeSec < 0 || activeSec >= sections.length) return;
@@ -880,7 +880,7 @@ function snapshotCurrentSection() {
   if (active && active.type === 'activeSelection') {
     // discardActiveObject converts group-relative coords back to absolute so toJSON
     // captures the correct positions.  We do NOT recreate the ActiveSelection
-    // afterwards: the round-trip (absolute â†’ group-relative â†’ absolute) goes through
+    // afterwards: the round-trip (absolute → group-relative → absolute) goes through
     // qrDecompose twice and compounds floating-point errors by 3-4 px per navigation,
     // which visibly drifts objects across the canvas over time.
     canvas.discardActiveObject();
@@ -888,7 +888,7 @@ function snapshotCurrentSection() {
   sections[activeSec].objects = canvas.toJSON(CANVAS_JSON_PROPS).objects.filter(o => !o._isGlow && !o._isGlitter);
 }
 
-/* â”€â”€ Glow list UI (dynamic per-section) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Glow list UI (dynamic per-section) ─────────────────────────────────── */
 function renderGlowList(sec) {
   const list = document.getElementById('sp-glow-list');
   list.innerHTML = '';
@@ -900,10 +900,10 @@ function renderGlowList(sec) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
         <span style="font-size:11px;color:#ffd700;font-weight:600">Glow ${idx + 1}</span>
         <div style="display:flex;gap:3px;align-items:center">
-          <button class="glow-bg" title="Send one layer back" style="padding:1px 6px;font-size:12px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">â–¼</button>
+          <button class="glow-bg" title="Send one layer back" style="padding:1px 6px;font-size:12px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">▼</button>
           <span class="glow-level" style="font-size:10px;color:#aaa;min-width:18px;text-align:center">${sp}</span>
-          <button class="glow-fg" title="Bring one layer forward" style="padding:1px 6px;font-size:12px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">â–²</button>
-          <button class="glow-rm" style="padding:1px 6px;font-size:11px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">âœ•</button>
+          <button class="glow-fg" title="Bring one layer forward" style="padding:1px 6px;font-size:12px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">▲</button>
+          <button class="glow-rm" style="padding:1px 6px;font-size:11px;border:none;border-radius:3px;cursor:pointer;background:#555;color:#fff">✕</button>
         </div>
       </div>
       <label style="display:block;font-size:11px;color:#ccc">Intensity
@@ -955,7 +955,7 @@ function renderGlowList(sec) {
   });
 }
 
-/* â”€â”€ Section props panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Section props panel ────────────────────────────────────────────────── */
 function renderSectionProps() {
   if (activeSec < 0) return;
   const sec = sections[activeSec];
@@ -1054,7 +1054,7 @@ function bindSectionProps() {
     markDirty();
   });
 
-  // Golden glow controls â€” dynamic per-glow list rendered by renderGlowList()
+  // Golden glow controls — dynamic per-glow list rendered by renderGlowList()
   document.getElementById('btn-add-glow').addEventListener('click', () => {
     if (activeSec < 0) return;
     const sec = sections[activeSec];
@@ -1123,7 +1123,7 @@ function bindSectionProps() {
   });
 }
 
-/* â”€â”€ Add section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Add section ────────────────────────────────────────────────────────── */
 function addSection() {
   snapshotCurrentSection();
   const label   = 'Section ' + (sections.length + 1);
@@ -1140,7 +1140,7 @@ function addSection() {
   }, 50);
 }
 
-/* â”€â”€ Toolbar context sensitivity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Toolbar context sensitivity ────────────────────────────────────────── */
 function updateToolbar() {
   const objs  = canvas.getActiveObjects();
   const obj   = objs.length === 1 ? objs[0] : null;
@@ -1200,7 +1200,7 @@ function fabricColorToHex(color) {
   return '#000000';
 }
 
-/* â”€â”€ Toolbar bindings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Toolbar bindings ───────────────────────────────────────────────────── */
 function bindToolbar() {
   document.getElementById('btn-add-text').addEventListener('click', addText);
   document.getElementById('btn-add-image').addEventListener('click', addImages);
@@ -1349,7 +1349,7 @@ function applyShape(prop, val) {
   obj.set(prop, val); canvas.renderAll();
 }
 
-/* â”€â”€ Multi-select alignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Multi-select alignment ─────────────────────────────────────────────── */
 function alignObjects(dir) {
   const active = canvas.getActiveObject();
   if (!active || active.type !== 'activeSelection') return;
@@ -1386,7 +1386,7 @@ function alignObjects(dir) {
   onCanvasChange();
 }
 
-/* â”€â”€ Text style picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Text style picker ──────────────────────────────────────────────────── */
 function renderTextStyles() {
   const list = document.getElementById('text-style-list');
   list.innerHTML = '';
@@ -1408,7 +1408,7 @@ function renderTextStyles() {
 
     const del = document.createElement('button');
     del.className = 'ts-del';
-    del.textContent = 'âœ•';
+    del.textContent = '✕';
     del.title = 'Delete style';
     del.addEventListener('click', e => {
       e.stopPropagation();
@@ -1465,7 +1465,7 @@ function captureTextStyle() {
   markDirty();
 }
 
-/* â”€â”€ Add objects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Add objects ────────────────────────────────────────────────────────── */
 function addText() {
   const t = new fabric.Textbox('Double-click to edit', {
     left: 60, top: 60,
@@ -1504,7 +1504,7 @@ function addRect() {
   canvas.renderAll();
 }
 
-/* â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Helpers ────────────────────────────────────────────────────────────── */
 function dataUrlToBlob(dataUrl) {
   const [header, b64] = dataUrl.split(',');
   let mime = (header.match(/:(.*?);/) || [])[1] || 'image/png';
@@ -1515,7 +1515,7 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([buf], { type: mime });
 }
 
-/* â”€â”€ AI Image Cutout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── AI Image Cutout ────────────────────────────────────────────────────── */
 function showCutoutOverlay(show, msg, pct) {
   const overlay = document.getElementById('cutout-overlay');
   overlay.style.display = show ? 'flex' : 'none';
@@ -1527,11 +1527,11 @@ async function cutoutImage() {
   const obj = canvas.getActiveObject();
   if (!obj || obj.type !== 'image') return;
 
-  showCutoutOverlay(true, 'Loading AI model (first run: ~1-2 min WASM compile)â€¦', 0);
+  showCutoutOverlay(true, 'Loading AI model (first run: ~1-2 min WASM compile)…', 0);
 
   try {
     if (!removeBgFn) {
-      showCutoutOverlay(true, 'Importing AI libraryâ€¦', 5);
+      showCutoutOverlay(true, 'Importing AI library…', 5);
       const mod = await import('https://esm.sh/@imgly/background-removal@1.4.5');
       removeBgFn = mod.removeBackground
         ?? mod.default?.removeBackground
@@ -1539,7 +1539,7 @@ async function cutoutImage() {
       if (typeof removeBgFn !== 'function') throw new Error('removeBackground not exported');
     }
 
-    // Draw the canvas image element to a temp canvas â†’ blob (works for any src, incl. asset://)
+    // Draw the canvas image element to a temp canvas → blob (works for any src, incl. asset://)
     const el = obj.getElement();
     const tmpC = document.createElement('canvas');
     tmpC.width = el.naturalWidth || el.width;
@@ -1547,7 +1547,7 @@ async function cutoutImage() {
     tmpC.getContext('2d').drawImage(el, 0, 0);
     const blob = await new Promise(res => tmpC.toBlob(res, 'image/png'));
 
-    showCutoutOverlay(true, 'Running AI background removalâ€¦', 10);
+    showCutoutOverlay(true, 'Running AI background removal…', 10);
 
     const resultBlob = await removeBgFn(blob, {
       publicPath: 'vendor://background-removal/models/',
@@ -1558,12 +1558,12 @@ async function cutoutImage() {
           const pct = Math.round(10 + (current / total) * 85);
           const label = key.includes('inference') ? 'Running inference' :
                         key.includes('fetch')     ? 'Loading model'     : 'Processing';
-          showCutoutOverlay(true, label + 'â€¦', pct);
+          showCutoutOverlay(true, label + '…', pct);
         }
       },
     });
 
-    showCutoutOverlay(true, 'Applying resultâ€¦', 97);
+    showCutoutOverlay(true, 'Applying result…', 97);
 
     // Save cutout result as an asset file so it doesn't bloat the project JSON.
     const reader = new FileReader();
@@ -1594,7 +1594,7 @@ async function cutoutImage() {
   }
 }
 
-/* â”€â”€ Image Crop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Image Crop ─────────────────────────────────────────────────────────── */
 function openCropModal() {
   const obj = canvas.getActiveObject();
   if (!obj || obj.type !== 'image') return;
@@ -1637,7 +1637,7 @@ function updateCropRect() {
   rect.style.width  = dw + 'px';
   rect.style.height = dh + 'px';
 
-  document.getElementById('crop-info').textContent = `${cropW} Ã— ${cropH} px`;
+  document.getElementById('crop-info').textContent = `${cropW} × ${cropH} px`;
 }
 
 function closeCropModal() {
@@ -1657,7 +1657,7 @@ async function applyCropModal() {
   tmpC.getContext('2d').drawImage(el, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
   closeCropModal();
-  setStatus('Saving cropped imageâ€¦');
+  setStatus('Saving cropped image…');
 
   const dataUrl   = tmpC.toDataURL('image/png');
   const assetName = await window.editorAPI.importAssetData(dataUrl, 'png');
@@ -1684,7 +1684,7 @@ async function applyCropModal() {
 }
 
 function bindCropHandlers() {
-  let dragMode  = null;   // null | 'move' | handle-pos string (nw, n, ne, â€¦)
+  let dragMode  = null;   // null | 'move' | handle-pos string (nw, n, ne, …)
   let dragStart = null;   // { mx, my, cropX, cropY, cropW, cropH, scale, imgW, imgH }
 
   const rect = document.getElementById('crop-rect');
@@ -1760,7 +1760,7 @@ function bindCropHandlers() {
   });
 }
 
-/* â”€â”€ Undo / Redo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Undo / Redo ────────────────────────────────────────────────────────── */
 function pushHistory() {
   if (activeSec < 0) return;
   const json = JSON.stringify(canvas.toJSON(CANVAS_JSON_PROPS).objects.filter(o => !o._isGlow && !o._isGlitter));
@@ -1772,7 +1772,7 @@ function pushHistory() {
   historyIdx[activeSec] = h.length - 1;
 }
 
-const RECOVERY_MAX_BYTES = 10 * 1024 * 1024; // 10 MB â€” skip recovery if project is too large
+const RECOVERY_MAX_BYTES = 10 * 1024 * 1024; // 10 MB — skip recovery if project is too large
 let _recoveryTimer = null;
 function scheduleRecovery() {
   clearTimeout(_recoveryTimer);
@@ -1783,7 +1783,7 @@ function scheduleRecovery() {
     }
     const snap = JSON.stringify({ version: 1, canvasW: CANVAS_W, sections, textStyles });
     if (snap.length > RECOVERY_MAX_BYTES) {
-      setStatus('Project is large â€” auto-recovery skipped. Save manually (Ctrl+S).');
+      setStatus('Project is large — auto-recovery skipped. Save manually (Ctrl+S).');
       return;
     }
     window.editorAPI.writeRecovery(snap).catch(() => {});
@@ -1847,7 +1847,7 @@ function redo() {
   restoreHistory(h[idx]);
 }
 
-/* â”€â”€ Zoom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Zoom ───────────────────────────────────────────────────────────────── */
 function setZoom(z) {
   zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
   canvas.setZoom(zoom);
@@ -1860,14 +1860,14 @@ function setZoom(z) {
 function zoomFit() {
   const host = document.getElementById('canvas-host');
   // Never zoom above 1.0: zooming in pushes every object position to a
-  // non-integer CSS pixel (e.g. left=60 â†’ 71.16px at 1.19Ã—), which
+  // non-integer CSS pixel (e.g. left=60 → 71.16px at 1.19×), which
   // antialiases text edges and makes it look blurry. At 1.0 the canvas
   // scrolls horizontally only when the host is narrower than CANVAS_W.
   const z = Math.min(1.0, (host.clientWidth - 48) / CANVAS_W);
   setZoom(z);
 }
 
-/* â”€â”€ Save / Load â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Save / Load ────────────────────────────────────────────────────────── */
 async function saveProject(saveAs) {
   clearTimeout(_recoveryTimer);
   // Capture the active section index at the moment Save is clicked.
@@ -1881,7 +1881,7 @@ async function saveProject(saveAs) {
     const p = await window.editorAPI.saveProject(projectPath);
     if (!p) return;
     projectPath = p;
-    await window.editorAPI.setAssetDir(projectPath); // migrate temp assets â†’ project assets folder
+    await window.editorAPI.setAssetDir(projectPath); // migrate temp assets → project assets folder
   }
   await window.editorAPI.writeFile(projectPath, JSON.stringify({ version: 1, canvasW: CANVAS_W, sections, textStyles }, null, 2));
   await window.editorAPI.setSettings({ lastProjectPath: projectPath });
@@ -1892,7 +1892,7 @@ async function saveProject(saveAs) {
 }
 
 async function openProject() {
-  if (dirty && !confirm('Unsaved changes â€” open anyway?')) return;
+  if (dirty && !confirm('Unsaved changes — open anyway?')) return;
   const result = await window.editorAPI.openProject();
   if (!result) return;
   projectPath = result.path;
@@ -1903,7 +1903,7 @@ async function openProject() {
 }
 
 async function newProject() {
-  if (dirty && !confirm('Unsaved changes â€” start new project?')) return;
+  if (dirty && !confirm('Unsaved changes — start new project?')) return;
   projectPath = null;
   await window.editorAPI.clearAssetDir();
   textStyles = DEFAULT_TEXT_STYLES.map(s => ({ ...s }));
@@ -1925,21 +1925,21 @@ async function loadData(data) {
     }
   }
   if (total > 0) {
-    setStatus(`Migrating ${total} embedded images to files â€” this happens onceâ€¦`);
+    setStatus(`Migrating ${total} embedded images to files — this happens once…`);
     let done = 0;
     for (const sec of secs) {
       if (sec.bgImage && sec.bgImage.startsWith('data:')) {
         const ext  = (sec.bgImage.match(/data:image\/([a-z+]+)/) || [])[1] || 'png';
         const name = await window.editorAPI.importAssetData(sec.bgImage, ext);
         sec.bgImage = 'asset://' + name;
-        setStatus(`Migrating imagesâ€¦ ${++done}/${total}`);
+        setStatus(`Migrating images… ${++done}/${total}`);
       }
       for (const obj of (sec.objects || [])) {
         if (obj.type === 'image' && obj.src && obj.src.startsWith('data:')) {
           const ext  = (obj.src.match(/data:image\/([a-z+]+)/) || [])[1] || 'png';
           const name = await window.editorAPI.importAssetData(obj.src, ext);
           obj.src = 'asset://' + name;
-          setStatus(`Migrating imagesâ€¦ ${++done}/${total}`);
+          setStatus(`Migrating images… ${++done}/${total}`);
         }
       }
     }
@@ -1956,7 +1956,7 @@ async function loadData(data) {
     }
   }
   if (usedFonts.size) {
-    setStatus('Loading fontsâ€¦');
+    setStatus('Loading fonts…');
     await Promise.all([...usedFonts].map(ff =>
       Promise.all(['400', '700', '400italic'].map(variant => {
         const [wt, style] = variant === '400italic' ? ['400', 'italic'] : [variant, 'normal'];
@@ -1970,7 +1970,7 @@ async function loadData(data) {
   initSections(secs);
   dirty = total > 0; // mark dirty so the user knows to save the migrated project
   updateTitle();
-  setStatus(total > 0 ? `Migrated ${total} images â€” press Ctrl+S to save the smaller project` : 'Opened.');
+  setStatus(total > 0 ? `Migrated ${total} images — press Ctrl+S to save the smaller project` : 'Opened.');
 }
 
 function initSections(defs) {
@@ -1981,7 +1981,7 @@ function initSections(defs) {
     bgGrad1: s.bgGrad1 || '#5a0a2e', bgGrad2: s.bgGrad2 || '#c9a84c',
     bgGradDir: s.bgGradDir || 'to bottom',
     bgTexture: s.bgTexture || 'dots', bgTexFg: s.bgTexFg || '#c9a84c', bgTexBg: s.bgTexBg || '#5a0a2e',
-    // Migrate old single bgGlow â†’ bgGlows array.
+    // Migrate old single bgGlow → bgGlows array.
     bgGlows: s.bgGlows ? s.bgGlows.map(g => ({ stackPos: 0, ...g, foreground: undefined }))
            : (s.bgGlow && s.bgGlow.enabled) ? [{ ...s.bgGlow, id: s.bgGlow.id || 'glow-0', stackPos: 0 }]
            : [],
@@ -1995,7 +1995,7 @@ function initSections(defs) {
   switchSection(0);
 }
 
-/* â”€â”€ Build Google Fonts URL for export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Build Google Fonts URL for export ──────────────────────────────────── */
 function buildGoogleFontsUrl(usedFonts) {
   const needed = [...usedFonts].filter(f => GOOGLE_FONTS.has(f));
   if (!needed.length) return '';
@@ -2006,14 +2006,14 @@ function buildGoogleFontsUrl(usedFonts) {
   return `https://fonts.googleapis.com/css2?family=${families}&display=swap`;
 }
 
-/* â”€â”€ Export to HTML â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Export to HTML ─────────────────────────────────────────────────────── */
 async function exportHTML() {
   clearTimeout(_recoveryTimer);
   snapshotCurrentSection();
   const destPath = await window.editorAPI.exportDir();
   if (!destPath) return;
 
-  setStatus('Exportingâ€¦');
+  setStatus('Exporting…');
   try {
     const usedFonts = new Set();
     const images    = [];
@@ -2089,10 +2089,10 @@ ${sectionsHTML}
   }
 }
 
-/* â”€â”€ Export for Print â€” renders each section to a PNG image file â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Export for Print — renders each section to a PNG image file ─────────── */
 
 // Render one section to a PNG data URL using an off-screen Fabric.StaticCanvas.
-// multiplier=2 â†’ 2Ã— pixel density (â‰ˆ190 DPI on A4) for crisp print output.
+// multiplier=2 → 2× pixel density (≈190 DPI on A4) for crisp print output.
 function renderSectionToDataUrl(sec, multiplier) {
   return new Promise((resolve, reject) => {
     const el = document.createElement('canvas');
@@ -2166,17 +2166,17 @@ function renderSectionToDataUrl(sec, multiplier) {
   });
 }
 
-// Shared render helper â€” renders all sections to PNG data URLs at print DPI.
-// Target spec: 6.00 Ã— 8.50 in @ 300 DPI â†’ 1800 Ã— 2550px per section.
-// Set canvas section height to 1124px for exact 6Ã—8.5 proportions.
+// Shared render helper — renders all sections to PNG data URLs at print DPI.
+// Target spec: 6.00 × 8.50 in @ 300 DPI → 1800 × 2550px per section.
+// Set canvas section height to 1124px for exact 6×8.5 proportions.
 const PRINT_DPI  = 300;
 const PRINT_W_IN = 6.00;
 const PRINT_H_IN = 8.50;
-const PRINT_MULTIPLIER  = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 1800 / 794 â‰ˆ 2.267
-// 0.25 inch safe margin in canvas pixels (editor guide only â€” never exported)
-const SAFE_MARGIN_PX = Math.round(0.25 * CANVAS_W / PRINT_W_IN); // â‰ˆ 33px
+const PRINT_MULTIPLIER  = (PRINT_DPI * PRINT_W_IN) / CANVAS_W; // 1800 / 794 ≈ 2.267
+// 0.25 inch safe margin in canvas pixels (editor guide only — never exported)
+const SAFE_MARGIN_PX = Math.round(0.25 * CANVAS_W / PRINT_W_IN); // ≈ 33px
 // Screens read ~15% brighter than print; this boosts PDF backgrounds to compensate
-// for dot gain and the sRGBâ†’CMYK darkening most printer RIPs apply without an ICC profile.
+// for dot gain and the sRGB→CMYK darkening most printer RIPs apply without an ICC profile.
 // Raise toward 1.25 if output is still too dark; lower toward 1.05 if it looks washed out.
 const PRINT_BRIGHTNESS_BOOST = 1.15;
 
@@ -2216,10 +2216,10 @@ async function _renderAllSections(onProgress) {
 async function exportPrint() {
   const destDir = await window.editorAPI.exportDir();
   if (!destDir) return;
-  const files = await _renderAllSections((n, t) => setStatus(`Rendering section ${n}/${t} at ${PRINT_DPI} DPIâ€¦`));
+  const files = await _renderAllSections((n, t) => setStatus(`Rendering section ${n}/${t} at ${PRINT_DPI} DPI…`));
   const imageFiles = files.map(f => ({ name: f.name + '.png', dataUrl: f.dataUrl }));
   await window.editorAPI.savePrintImages(destDir, imageFiles);
-  setStatus(`PNG export: ${imageFiles.length} images @ ${PRINT_DPI} DPI (2550Ã—1800px) â†’ ${destDir}`);
+  setStatus(`PNG export: ${imageFiles.length} images @ ${PRINT_DPI} DPI (2550×1800px) → ${destDir}`);
 }
 
 // Lighten a PNG data URL by factor (e.g. 1.15 = 15% brighter) via CSS filter.
@@ -2241,7 +2241,7 @@ function applyBrightness(dataUrl, factor) {
 }
 
 // Crop a rendered PNG data URL to the safe content area by removing the 0.25" bleed
-// zone from each edge. Used for digital PDF only â€” print exports keep the full bleed.
+// zone from each edge. Used for digital PDF only — print exports keep the full bleed.
 function cropToSafeArea(dataUrl) {
   const m = Math.round(0.25 * PRINT_DPI); // 75px at 300 DPI
   return new Promise(resolve => {
@@ -2274,7 +2274,7 @@ function renderSectionForPdf(sec, multiplier) {
     const doExport = async () => {
       // Extract text data from sec.objects JSON for positions/styles (more reliable than
       // live Fabric objects which can silently drop complex styles like gradients/cutouts).
-      // textLines is NOT serialised in JSON â€” it's a computed Fabric property â€” so we
+      // textLines is NOT serialised in JSON — it's a computed Fabric property — so we
       // build a positional lookup from live canvas objects to get the actual wrapped lines.
       const allObjs  = sec.objects || [];
       const textObjs = allObjs.filter(o => o.type === 'textbox' || o.type === 'i-text');
@@ -2285,13 +2285,13 @@ function renderSectionForPdf(sec, multiplier) {
 
       // For each textLines array, compute which indices are paragraph-ending lines.
       // A paragraph ends at the last wrapped line before an explicit \n (or the very last line).
-      // These lines must NOT be fully justified â€” they stay left-aligned.
+      // These lines must NOT be fully justified — they stay left-aligned.
       function computeParaEndFlags(text, textLines) {
         const flags = new Array(textLines.length).fill(false);
         if (!textLines.length) return flags;
         flags[textLines.length - 1] = true; // Last line is always a paragraph end.
         const paras = (text || '').split('\n');
-        if (paras.length <= 1) return flags; // Single paragraph â€” only last line is end.
+        if (paras.length <= 1) return flags; // Single paragraph — only last line is end.
         let li = 0;
         for (let pi = 0; pi < paras.length - 1 && li < textLines.length; pi++) {
           const target = paras[pi].replace(/\s+/g, ' ').trim();
@@ -2319,7 +2319,7 @@ function renderSectionForPdf(sec, multiplier) {
           const top  = oy === 'center' ? (o.top  || 0) - h / 2
                      : oy === 'bottom' ? (o.top  || 0) - h
                      :                   (o.top  || 0);
-          // textLines from the live Fabric object â€” computed by Canvas2D, matches the editor.
+          // textLines from the live Fabric object — computed by Canvas2D, matches the editor.
           const live = liveTextObjs[i];
           const textLines = (live && Array.isArray(live.textLines) && live.textLines.length)
                             ? live.textLines.map(String)
@@ -2435,13 +2435,13 @@ async function exportPDF() {
   const total = sections.length;
   const pdfSections = [];
   for (let i = 0; i < total; i++) {
-    setStatus(`Rendering section ${i + 1}/${total} for PDFâ€¦`);
+    setStatus(`Rendering section ${i + 1}/${total} for PDF…`);
     const result = await renderSectionForPdf(sections[i], PRINT_MULTIPLIER);
     pdfSections.push(result);
   }
 
-  setStatus(`Assembling PDF with vector textâ€¦`);
-  console.log('[PDF] calling exportToPdfVector â€” sections:', pdfSections.length, 'fonts:', googleFontsList);
+  setStatus(`Assembling PDF with vector text…`);
+  console.log('[PDF] calling exportToPdfVector — sections:', pdfSections.length, 'fonts:', googleFontsList);
   let ipcResult;
   try {
     ipcResult = await window.editorAPI.exportToPdfVector(
@@ -2455,11 +2455,11 @@ async function exportPDF() {
   // Main process returns { destPath, logs } so its logs appear in DevTools.
   const { destPath, logs: mainLogs } = ipcResult || {};
   (mainLogs || []).forEach(l => console.log('[main]', l));
-  setStatus(`PDF export: ${pdfSections.length} page${pdfSections.length !== 1 ? 's' : ''} â†’ ${destPath || '(no path)'}`);
+  setStatus(`PDF export: ${pdfSections.length} page${pdfSections.length !== 1 ? 's' : ''} → ${destPath || '(no path)'}`);
 }
 
 /* Digital PDF: sRGB raster, content cropped to the safe area (0.25" bleed removed from
-   each edge). Page size = trim size: 5.50" Ã— 8.00" (6.00" - 0.50" Ã— 8.50" - 0.50"). */
+   each edge). Page size = trim size: 5.50" × 8.00" (6.00" - 0.50" × 8.50" - 0.50"). */
 async function exportDigitalPDF() {
   const destDir = await window.editorAPI.exportDir();
   if (!destDir) return;
@@ -2470,27 +2470,27 @@ async function exportDigitalPDF() {
   const total = sections.length;
   const images = [];
   for (let i = 0; i < total; i++) {
-    setStatus(`Rendering section ${i + 1}/${total} for digital PDFâ€¦`);
+    setStatus(`Rendering section ${i + 1}/${total} for digital PDF…`);
     const dataUrl = await renderSectionToDataUrl(sections[i], PRINT_MULTIPLIER);
     const cropped = await cropToSafeArea(dataUrl);
     images.push({ dataUrl: cropped });
   }
 
-  setStatus('Assembling digital PDFâ€¦');
-  const safeWIn = PRINT_W_IN - 0.50; // 5.50" â€” 6.00" minus 0.25" bleed on each side
-  const safeHIn = PRINT_H_IN - 0.50; // 8.00" â€” 8.50" minus 0.25" bleed on each side
+  setStatus('Assembling digital PDF…');
+  const safeWIn = PRINT_W_IN - 0.50; // 5.50" — 6.00" minus 0.25" bleed on each side
+  const safeHIn = PRINT_H_IN - 0.50; // 8.00" — 8.50" minus 0.25" bleed on each side
   try {
     const destPath = await window.editorAPI.exportToPdf(
       destDir, images, { wIn: safeWIn, hIn: safeHIn, filename: 'brochure-digital.pdf' }
     );
-    setStatus(`Digital PDF: ${total} page${total !== 1 ? 's' : ''} â†’ ${destPath}`);
+    setStatus(`Digital PDF: ${total} page${total !== 1 ? 's' : ''} → ${destPath}`);
   } catch (err) {
     setStatus(`Digital PDF export failed: ${err && err.message}`);
   }
 }
 
-/* Two-Up PNG: sections 4 + 5 side-by-side on 12"Ã—8.5" landscape at 300 DPI.
-   Each section fills its 6"Ã—8.5" slot exactly (1800Ã—2550px) â€” no crop, no borders. */
+/* Two-Up PNG: sections 4 + 5 side-by-side on 12"×8.5" landscape at 300 DPI.
+   Each section fills its 6"×8.5" slot exactly (1800×2550px) — no crop, no borders. */
 async function exportTwoUp() {
   if (sections.length < 5) {
     setStatus('Two-Up export needs at least 5 sections (sections 4 & 5 will be combined side-by-side).');
@@ -2507,12 +2507,12 @@ async function exportTwoUp() {
   const mult3 = TWO_UP_H / (sections[3].height || 1124);
   const mult4 = TWO_UP_H / (sections[4].height || 1124);
 
-  setStatus('Rendering section 4 for Two-Upâ€¦');
+  setStatus('Rendering section 4 for Two-Up…');
   const url3 = await renderSectionToDataUrl(sections[3], mult3);
-  setStatus('Rendering section 5 for Two-Upâ€¦');
+  setStatus('Rendering section 5 for Two-Up…');
   const url4 = await renderSectionToDataUrl(sections[4], mult4);
 
-  setStatus('Building Two-Up PNGâ€¦');
+  setStatus('Building Two-Up PNG…');
   let result;
   try {
     result = await window.editorAPI.exportTwoUp(destDir, [{ dataUrl: url3 }, { dataUrl: url4 }]);
@@ -2575,7 +2575,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap, lazyLoad
     const col = safeColor(o.fill, '#000000');
     // Map Fabric justify variants to CSS text-align + text-align-last.
     // Fabric's justify-left/center/right mean "justify all lines but align the last line
-    // (and lines before explicit \n) to left/center/right" â€” CSS text-align-last mirrors this.
+    // (and lines before explicit \n) to left/center/right" — CSS text-align-last mirrors this.
     // Without text-align-last, browsers stretch pre-wrap lines before \n, which looks different.
     const taRaw = o.textAlign || 'left';
     const ta    = taRaw.startsWith('justify') ? 'justify' : taRaw;
@@ -2608,7 +2608,7 @@ function objectToHTML(o, sec, usedFonts, images, seenNames, dataUrlMap, lazyLoad
     const hasStroke = o.strokeWidth > 0 && o.stroke && o.stroke !== '' && o.stroke !== 'transparent';
     const border    = hasStroke ? `border:${o.strokeWidth}px solid ${o.stroke};` : '';
     const gsCss     = o._grayscale ? 'filter:grayscale(100%);' : '';
-    // Fabric flipX/flipY â€” reflect via CSS transform so the image matches the canvas.
+    // Fabric flipX/flipY — reflect via CSS transform so the image matches the canvas.
     const flipParts = [];
     if (o.flipX) flipParts.push('scaleX(-1)');
     if (o.flipY) flipParts.push('scaleY(-1)');
@@ -2672,10 +2672,10 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-/* â”€â”€ Preview / Export helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Preview / Export helpers ────────────────────────────────────────────── */
 
 function assetName(src) {
-  // Chromium normalises asset://img.png â†’ asset://img.png/ (trailing slash for empty path).
+  // Chromium normalises asset://img.png → asset://img.png/ (trailing slash for empty path).
   // Use URL.hostname to reliably strip the scheme + any trailing slash.
   try { return new URL(src).hostname; } catch { return src.slice(8); }
 }
@@ -2699,7 +2699,7 @@ function buildGlowsHTML(sec) {
 }
 
 // Interleave objectToHTML strings with glow overlay divs in correct z-order.
-// stackPos=0 â†’ before all objects; stackPos=N â†’ after the N-th object.
+// stackPos=0 → before all objects; stackPos=N → after the N-th object.
 function mergeGlowsIntoHTML(objsHtmlArr, glowItems) {
   if (!glowItems.length) return objsHtmlArr;
   const result = [];
@@ -2728,7 +2728,7 @@ function buildBgStyleForFolder(sec, seenNames, images) {
 async function previewHTML() {
   clearTimeout(_recoveryTimer);
   snapshotCurrentSection();
-  setStatus('Generating previewâ€¦');
+  setStatus('Generating preview…');
   try {
     const usedFonts = new Set();
     const images    = [];
@@ -2770,7 +2770,7 @@ body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;pa
 </style>
 </head>
 <body>
-<div class="preview-label">Mobile Preview â€” 390px</div>
+<div class="preview-label">Mobile Preview — 390px</div>
 <div class="phone-frame">
   <div class="phone-screen">
     <div class="phone-content">
@@ -2791,15 +2791,15 @@ ${sectionsHTML}
 }
 
 
-/* â”€â”€ Status / title helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Status / title helpers ─────────────────────────────────────────────── */
 function setStatus(msg) { document.getElementById('status-msg').textContent = msg; }
 function markDirty() { dirty = true; updateTitle(); }
 function updateTitle() {
   const name = projectPath ? projectPath.split(/[/\\]/).pop() : 'Untitled';
-  document.getElementById('status-project').textContent = (dirty ? 'â— ' : '') + name;
+  document.getElementById('status-project').textContent = (dirty ? '● ' : '') + name;
 }
 
-/* â”€â”€ Keyboard shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Keyboard shortcuts ─────────────────────────────────────────────────── */
 function bindKeyboard() {
   document.addEventListener('keydown', e => {
     const ctrl = e.ctrlKey || e.metaKey;
@@ -2858,7 +2858,7 @@ function insertTextAtCursor(obj, text) {
 // back to real measurements so further edits and word-wrap stay predictable.
 // Snap an object's left/top to integer CSS pixels so the canvas position
 // matches fabricLeft/Top (which also uses Math.round).  DPR-based snapping
-// produced non-integer CSS values at DPRâ‰ 1 (e.g. -18.5 at DPR=2) that
+// produced non-integer CSS values at DPR≠1 (e.g. -18.5 at DPR=2) that
 // fabricLeft then rounded to a different integer (-18 vs -19), causing a
 // visible 1-pixel misalignment between the canvas and the HTML preview.
 function snapObjToPixel(obj) {
@@ -2954,7 +2954,7 @@ function duplicateSelected() {
   });
 }
 
-/* â”€â”€ Menu events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Menu events ────────────────────────────────────────────────────────── */
 function bindMenuEvents() {
   const api = window.editorAPI;
   api.onMenu('menu:new',       () => newProject());
@@ -2974,7 +2974,7 @@ function bindMenuEvents() {
   api.onMenu('menu:zoom-fit',  () => zoomFit());
 }
 
-/* â”€â”€ Bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Bootstrap ──────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   // Load persisted custom fonts before building the picker
   try {
@@ -2986,7 +2986,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!FONTS.some(ff => ff.name === f.name)) FONTS.push({ name: f.name, cat: f.cat });
       });
     }
-  } catch { /* ignore â€” settings unavailable */ }
+  } catch { /* ignore — settings unavailable */ }
 
   buildFontPicker();
   renderTextStyles();
@@ -2999,7 +2999,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindCropHandlers();
   document.getElementById('btn-add-section').addEventListener('click', addSection);
 
-  // Try to resume: saved project â†’ recovery snapshot â†’ default template
+  // Try to resume: saved project → recovery snapshot → default template
   let resumed = false;
   try {
     const settings = await window.editorAPI.getSettings();
@@ -3022,7 +3022,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadData(JSON.parse(rec));
         dirty = true;
         updateTitle();
-        setStatus('Recovered unsaved work â€” press Ctrl+S to save.');
+        setStatus('Recovered unsaved work — press Ctrl+S to save.');
         resumed = true;
       }
     } catch (e) { /* corrupt recovery */ }
@@ -3030,10 +3030,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (!resumed) {
     initSections(DEFAULT_SECTIONS);
-    setStatus('Ready â€” drag images, click T for text, â–­ for shapes.');
+    setStatus('Ready — drag images, click T for text, ▭ for shapes.');
   }
 
   updateTitle();
   setTimeout(zoomFit, 100);
 });
-
