@@ -19,12 +19,13 @@ body {
 /* Mobile poster layout */
 .phone-page {
   position: relative;        /* anchors all absolute children */
-  width: 100%;
+  width: min(100vw, 430px);
   /* max() ensures page is always tall enough to show the full portrait background
      image (2256×3360px). 149vw = (3360/2256)×100vw — the scaled image height
      when cover fills the viewport width. Falls back to 100vh on portrait screens
      where the image already fits vertically. */
-  min-height: max(100vh, 149vw);
+  /*min-height: max(100vh, 149vw);*/
+   aspect-ratio: 9/16;
 
   background-image:
     linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.28)),
@@ -156,6 +157,10 @@ body {
    ============================== */
 
 @media screen and (orientation: landscape) and (max-height: 500px) {
+   .phone-page {
+      width: 100%;
+   }
+
   .button-group {
     gap: 16px;
   }
@@ -167,6 +172,11 @@ body {
   }
 }
 
+@media (min-width: 480px) {
+  .phone-page {
+    width: 100%;
+  }
+}
 
 /* ==============================
    PC / large tablet (≥ 769px wide)
@@ -180,6 +190,7 @@ body {
 
 @media (min-width: 769px) {
   .phone-page {
+    width: 100%;
     max-width: 728px;
     margin: 0 auto;
     min-height: max(100vh, 1085px);
